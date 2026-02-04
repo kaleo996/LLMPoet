@@ -86,16 +86,16 @@ def parse_template(masked_poem):
     """
     segments = []
 
-    # Replace all <|extra_1|> with a placeholder, then split by punctuation
-    temp = masked_poem
-    # Find all sequences of <|extra_1|> followed by punctuation or end
-    pattern = r'(<\|extra_1\|>+)([，。、；\n]?)'
+    # Find all sequences of one or more <|extra_1|> followed by punctuation or end
+    _placeholder = '<|extra_1|>'
+    pattern = r'(<\|extra_1\|>)+([，。、；]?)'
 
-    matches = re.finditer(pattern, temp)
+    matches = re.finditer(pattern, masked_poem)
     for match in matches:
-        char_count = match.group(1).count('<|extra_1|>')
-        punctuation = match.group(2) if match.group(2) else ''
-        segments.append((char_count, punctuation))
+        punct = match.group(2) or ''
+        placeholder_len = len(match.group(0)) - len(punct)
+        char_count = placeholder_len // len(_placeholder)
+        segments.append((char_count, punct))
 
     total_chars = sum(seg[0] for seg in segments)
     return segments, total_chars
@@ -109,8 +109,7 @@ def generate_poem(model,
                   max_input_length=250,
                   top_k=50,
                   top_p=0.95,
-                  temperature=0.8,
-                  do_sample=True):
+                  temperature=0.8):
     """
     Generate poetry with automatic punctuation insertion
     
@@ -151,39 +150,17 @@ def generate_poem(model,
                                  max_length=max_input_length,
                                  add_special_tokens=False).to(device)
 
-    # Generation config - only generate characters, no punctuation
-    generation_config = GenerationConfig(
-        max_new_tokens=total_chars_needed + 10,  # Add buffer
-        do_sample=do_sample,
-        top_k=top_k,
-        top_p=top_p,
-        temperature=temperature,
-        pad_token_id=tokenizer.pad_token_id,
-        eos_token_id=tokenizer.eos_token_id,
-    )
-
-    # Generate characters only
-    print("Generating poetry...")
-
     with torch.no_grad():
-        outputs = model.generate(input_ids=input_ids, generation_config=generation_config)
-
-    # Decode output (only characters, no punctuation)
-    output_ids = outputs[0][input_ids.size(1):].tolist()
-    output_text = tokenizer.decode(output_ids, skip_special_tokens=False)
-
-    # Extract only Chinese characters from output (filter out punctuation, newlines, etc.)
-    chinese_chars_only = re.findall(r'[\u4e00-\u9fff]', output_text)
-
-    # Insert punctuation according to template
-    generated_poem = ""
-    char_index = 0
-
-    for char_count, punctuation in segments:
-        # Extract characters for this segment
-        segment_chars = ''.join(chinese_chars_only[char_index:char_index + char_count])
-        generated_poem += segment_chars + punctuation
-        char_index += char_count
+        output_ids = model.generate_poem_guided(
+            input_ids=input_ids,
+            tokenizer=tokenizer,
+            segments=segments,
+            total_chars_needed=total_chars_needed,
+            top_k=top_k,
+            top_p=top_p,
+            temperature=temperature,
+        )
+    generated_poem = tokenizer.decode(output_ids, skip_special_tokens=False)
 
     return generated_poem
 
@@ -222,7 +199,7 @@ def main():
 
     print("\nGenerated poetry:")
     print(generated_poem)
-    print("-" * 50)
+    print("\n" + "-" * 50)
 
 
 if __name__ == "__main__":

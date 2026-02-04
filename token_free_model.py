@@ -3,8 +3,9 @@ Token-free Qwen3 model wrapper class
 Modify forward method to only allow single character token (Chinese characters) output
 """
 import torch
+import torch.nn.functional as F
 from transformers import Qwen3ForCausalLM
-from typing import Optional, Union, List, Tuple
+from typing import Optional, List, Tuple, Any
 
 
 class TokenFreeQwen3ForCausalLM(Qwen3ForCausalLM):
@@ -58,41 +59,94 @@ class TokenFreeQwen3ForCausalLM(Qwen3ForCausalLM):
 
         return model
 
-    def forward(
+    def _sample_next_token(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        labels: Optional[torch.LongTensor] = None,
-        use_cache: Optional[bool] = None,
-        cache_position: Optional[torch.LongTensor] = None,
-        logits_to_keep: Union[int, torch.Tensor] = 0,
-        **kwargs,
-    ):
-        """
-        Override forward method to apply mask after computing logits
-        """
-        # Call parent class forward
-        outputs = super().forward(
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            position_ids=position_ids,
-            past_key_values=past_key_values,
-            inputs_embeds=inputs_embeds,
-            labels=labels,
-            use_cache=use_cache,
-            cache_position=cache_position,
-            logits_to_keep=logits_to_keep,
-            **kwargs,
-        )
+        logits: torch.Tensor,
+        top_k: int,
+        top_p: float,
+        temperature: float,
+    ) -> int:
+        """Sample one token from logits."""
+        # Apply mask to avoid generating tokens not allowed
+        if self.logits_mask is not None:
+            mask_value = torch.finfo(logits.dtype).min
+            mask = self.logits_mask.to(logits.device)
+            logits = torch.where(mask, logits, mask_value)
 
-        # Apply mask if logits_mask is set
-        if self.logits_mask is not None and outputs.logits is not None:
-            mask_value = torch.finfo(outputs.logits.dtype).min
-            mask = self.logits_mask.to(outputs.logits.device)
-            # Apply mask: set logits that don't meet requirements to negative infinity
-            outputs.logits = torch.where(mask, outputs.logits, mask_value)
+        logits = logits[0, -1, :].float()
+        logits = logits / max(temperature, 1e-8)
+        if top_k > 0:
+            k = min(top_k, logits.size(-1))
+            topk_logits, _ = torch.topk(logits, k)
+            threshold = topk_logits[..., -1, None]
+            logits = torch.where(logits < threshold, torch.tensor(float("-inf"), device=logits.device, dtype=logits.dtype), logits)
+        if top_p < 1.0:
+            sorted_logits, sorted_indices = torch.sort(logits, descending=True)
+            cumsum = torch.cumsum(F.softmax(sorted_logits, dim=-1), dim=-1)
+            remove = cumsum > top_p
+            remove[1:] = remove[:-1].clone()
+            remove[0] = False
+            sorted_logits = sorted_logits.masked_fill(remove, float("-inf"))
+            logits = torch.zeros_like(logits).scatter_(-1, sorted_indices, sorted_logits)
+        probs = F.softmax(logits, dim=-1)
+        token_id = torch.multinomial(probs, num_samples=1).item()
+        return token_id
 
-        return outputs
+    @torch.no_grad()
+    def generate_poem_guided(
+        self,
+        input_ids: torch.LongTensor,
+        tokenizer: Any,
+        segments: List[Tuple[int, str]],
+        total_chars_needed: int,
+        top_k: int = 50,
+        top_p: float = 0.95,
+        temperature: float = 0.8,
+    ) -> torch.LongTensor:
+        """
+        Generate poetry one character at a time following the template.
+        At each character slot call forward once, sample one token;
+        after each segment append template punctuation and update KV cache.
+        Returns full sequence (input_ids + generated token ids) as (1, seq_len).
+        """
+        device = input_ids.device
+        generated_ids: List[int] = []
+        past_key_values = None # KV cache
+        cur_input_ids = input_ids
+        segment_idx = 0
+        char_in_segment = 0
+
+        # Generate total_chars_needed tokens
+        for _ in range(total_chars_needed):
+            outputs = self.forward(
+                input_ids=cur_input_ids,
+                past_key_values=past_key_values,
+                use_cache=True,
+            )
+            logits = outputs.logits
+            token_id = self._sample_next_token(
+                logits, top_k=top_k, top_p=top_p, temperature=temperature
+            )
+            generated_ids.append(token_id)
+            char_in_segment += 1
+
+            # If the current segment is complete, append punctuation
+            if char_in_segment == segments[segment_idx][0]:
+                punctuation = segments[segment_idx][1]
+                if punctuation:
+                    punct_ids = tokenizer.encode(punctuation, add_special_tokens=False)[0]
+                    generated_ids.append(punct_ids)
+                    cur_input_ids = torch.tensor([[token_id]], device=device, dtype=torch.long)
+                    outputs = self.forward(
+                        input_ids=cur_input_ids,
+                        past_key_values=outputs.past_key_values,
+                        use_cache=True,
+                    )
+                    token_id = punct_ids
+                segment_idx += 1
+                char_in_segment = 0
+            
+            cur_input_ids = torch.tensor([[token_id]], device=device, dtype=torch.long)
+            past_key_values = outputs.past_key_values # Update KV cache
+
+        return generated_ids
