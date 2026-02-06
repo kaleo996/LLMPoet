@@ -116,6 +116,7 @@ def generate_poem(model,
                   poem_type,
                   device,
                   variant=None,
+                  rhyme_group=None,
                   max_input_length=250,
                   top_k=50,
                   top_p=0.95,
@@ -129,6 +130,7 @@ def generate_poem(model,
         user_prompt: User input prompt (e.g., "Write a poem about spring")
         poem_type: Poetry type (e.g., "五言绝句", "七言律诗", etc.)
         variant: Metrical pattern variant name (e.g., "仄起首句不入韵"). None = random selection.
+        rhyme_group: Rhyme group name (e.g., "上平聲一東"). None = auto-detect from first rhyme position.
         max_input_length: Maximum input length
         top_k: top-k sampling
         top_p: top-p sampling
@@ -150,8 +152,6 @@ def generate_poem(model,
     position_constraints, variant_name = get_position_constraints(poem_type, variant_name=variant)
     if position_constraints is not None:
         print(f"Applying metrical pattern: {variant_name}")
-    else:
-        print(f"No metrical pattern defined for {poem_type}, generating without prosody constraints")
 
     # Build prompt (keep original template with punctuation for context)
     prompt = poetry_prompt_template.format_map({
@@ -167,6 +167,9 @@ def generate_poem(model,
                                  max_length=max_input_length,
                                  add_special_tokens=False).to(device)
 
+    if rhyme_group is not None:
+        print(f"Using specified rhyme group: {rhyme_group}")
+
     with torch.no_grad():
         output_ids = model.generate_poem_guided(
             input_ids=input_ids,
@@ -177,6 +180,7 @@ def generate_poem(model,
             top_p=top_p,
             temperature=temperature,
             position_constraints=position_constraints,
+            rhyme_group=rhyme_group,
         )
     generated_poem = tokenizer.decode(output_ids, skip_special_tokens=False)
 
@@ -197,6 +201,9 @@ def main():
     parser.add_argument("--poem_type", type=str, default="五言绝句", help="Poetry type (e.g., 五言绝句, 七言律诗, 菩萨蛮, …)")
     parser.add_argument("--variant", type=str, default=None,
                         help="Metrical pattern variant name (e.g., 仄起首句不入韵). If omitted, a random variant is chosen.")
+    parser.add_argument("--rhyme_group", type=str, default=None,
+                        help="Pingshui rhyme group name (e.g., 上平聲一東, 下平聲七陽). "
+                             "If omitted, the rhyme group is auto-detected from the first rhyme position generated.")
     parser.add_argument("--device", type=str, default="cuda", help="Device (cuda/cpu)")
 
     args = parser.parse_args()
@@ -215,6 +222,7 @@ def main():
                                    user_prompt=args.user_prompt,
                                    poem_type=args.poem_type,
                                    variant=args.variant,
+                                   rhyme_group=args.rhyme_group,
                                    device=args.device)
 
     print("-" * 50)

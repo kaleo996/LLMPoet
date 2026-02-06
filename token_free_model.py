@@ -33,9 +33,9 @@ class TokenFreeQwen3ForCausalLM(Qwen3ForCausalLM):
             self.use_token_ids = None
             self.logits_mask = None
 
-        # Prosody masks (initialised to None; populated via _build_prosody_masks)
-        self.ping_mask: Optional[torch.Tensor] = None
-        self.ze_mask: Optional[torch.Tensor] = None
+        # Prosody masks
+        self.ping_mask = None
+        self.ze_mask = None
         self.rhyme_index: Optional[Dict[str, List[int]]] = None
         self.token_to_ping_rhyme_groups: Optional[Dict[int, List[str]]] = None
 
@@ -54,12 +54,10 @@ class TokenFreeQwen3ForCausalLM(Qwen3ForCausalLM):
 
         # Ping / Ze boolean masks over full vocabulary
         self.ping_mask = torch.zeros(vocab_size, dtype=torch.bool)
-        if "ping" in tone_index:
-            self.ping_mask[tone_index["ping"]] = True
+        self.ping_mask[tone_index["ping"]] = True
 
         self.ze_mask = torch.zeros(vocab_size, dtype=torch.bool)
-        if "ze" in tone_index:
-            self.ze_mask[tone_index["ze"]] = True
+        self.ze_mask[tone_index["ze"]] = True
 
         # Store rhyme_index for on-demand mask construction
         self.rhyme_index = rhyme_index
@@ -76,8 +74,7 @@ class TokenFreeQwen3ForCausalLM(Qwen3ForCausalLM):
 
         ping_count = int(self.ping_mask.sum().item())
         ze_count = int(self.ze_mask.sum().item())
-        print(f"Prosody masks built: {ping_count} ping tokens, {ze_count} ze tokens, "
-              f"{len(rhyme_index)} rhyme groups")
+        print(f"Prosody masks built: {ping_count} ping tokens, {ze_count} ze tokens, {len(rhyme_index)} rhyme groups")
 
     def _build_position_mask(
         self,
@@ -89,8 +86,7 @@ class TokenFreeQwen3ForCausalLM(Qwen3ForCausalLM):
 
         Args:
             constraint: {"tone": "ping"|"ze"|"*", "is_rhyme": bool}
-            current_rhyme_group: The rhyme group already chosen for this poem
-                                 (None if not yet determined).
+            current_rhyme_group: The rhyme group already chosen for this poem (None if not yet determined).
 
         Returns:
             Boolean tensor of shape (vocab_size,) or None if no extra constraint.
@@ -99,15 +95,15 @@ class TokenFreeQwen3ForCausalLM(Qwen3ForCausalLM):
         is_rhyme = constraint["is_rhyme"]
 
         # Tone mask
-        if tone == "ping" and self.ping_mask is not None:
+        if tone == "ping":
             mask = self.ping_mask.clone()
-        elif tone == "ze" and self.ze_mask is not None:
+        elif tone == "ze":
             mask = self.ze_mask.clone()
         else:
             mask = None  # No tone constraint (flexible position)
 
-        # Rhyme mask (only when rhyme group is already determined)
-        if is_rhyme and current_rhyme_group is not None and self.rhyme_index is not None:
+        # Rhyme mask, only when rhyme group is already determined
+        if is_rhyme and current_rhyme_group is not None:
             vocab_size = self.config.vocab_size
             rhyme_mask = torch.zeros(vocab_size, dtype=torch.bool)
             if current_rhyme_group in self.rhyme_index:
@@ -121,7 +117,7 @@ class TokenFreeQwen3ForCausalLM(Qwen3ForCausalLM):
         return mask
 
     def _get_ping_rhyme_group(self, token_id: int) -> Optional[str]:
-        """Return the first ping-tone rhyme group for *token_id*, or None."""
+        """Return the first ping-tone rhyme group for token_id, or None."""
         if self.token_to_ping_rhyme_groups is not None:
             groups = self.token_to_ping_rhyme_groups.get(token_id, [])
             if groups:
@@ -221,6 +217,7 @@ class TokenFreeQwen3ForCausalLM(Qwen3ForCausalLM):
         top_p: float = 0.95,
         temperature: float = 0.8,
         position_constraints: Optional[List[Dict]] = None,
+        rhyme_group: Optional[str] = None,
     ) -> List[int]:
         """
         Generate poetry one character at a time following the template.
@@ -231,6 +228,9 @@ class TokenFreeQwen3ForCausalLM(Qwen3ForCausalLM):
             position_constraints: optional list of per-position constraint dicts
                 [{"tone": "ping"|"ze"|"*", "is_rhyme": bool}, ...].
                 Length must equal total_chars_needed when provided.
+            current_rhyme_group: optional rhyme group name to use for the poem
+                (e.g., "上平聲一東"). If None, the rhyme group will be
+                automatically determined from the first rhyme position.
 
         Returns:
             generated_ids: list of generated token IDs (including punctuation).
@@ -243,7 +243,10 @@ class TokenFreeQwen3ForCausalLM(Qwen3ForCausalLM):
         char_in_segment = 0
 
         # Prosody state
-        current_rhyme_group: Optional[str] = None
+        current_rhyme_group: Optional[str] = rhyme_group
+        # Check if current_rhyme_group is valid
+        if current_rhyme_group is not None and current_rhyme_group not in self.rhyme_index:
+            raise ValueError(f"Invalid rhyme group: {current_rhyme_group}. Valid groups: {list(self.rhyme_index.keys())}")
         global_char_idx = 0
 
         # Generate total_chars_needed tokens
