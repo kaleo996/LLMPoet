@@ -10,9 +10,9 @@ import re
 # Add current directory to path
 current_dir = os.path.dirname(os.path.abspath(__file__))
 
-from transformers import AutoTokenizer, GenerationConfig
+from transformers import AutoTokenizer
 from token_free_model import TokenFreeQwen3ForCausalLM
-from utils import masked_poem_dict, poetry_prompt_template
+from utils import masked_poem_dict, poetry_prompt_template, get_position_constraints
 
 
 def load_token_free_model(model_path=None, config_path=None, device="cuda"):
@@ -44,16 +44,24 @@ def load_token_free_model(model_path=None, config_path=None, device="cuda"):
     if config_path is None:
         config_path = os.path.join(current_dir, "single_char_tokens.json")
 
-    # Load use_token_ids (if provided)
+    # Load use_token_ids and prosody info of single character tokens
     use_token_ids = None
+    prosody_config = None
     if config_path and os.path.exists(config_path):
         print(f"Loading token-free config: {config_path}")
         with open(config_path, 'r', encoding='utf-8') as f:
             single_char_tokens_config = json.load(f)
             use_token_ids = single_char_tokens_config.get("use_token_ids")
-            if use_token_ids:
-                print(f"Loaded {len(use_token_ids)} single character token IDs")
-
+            tone_index = single_char_tokens_config.get("tone_index")
+            rhyme_index = single_char_tokens_config.get("rhyme_index")
+            prosody_config = {
+                "tone_index": tone_index,
+                "rhyme_index": rhyme_index,
+            }
+            print(
+                f"Loaded {len(use_token_ids)} single character token IDs, "
+                f"and {len(tone_index)} tone groups and {len(rhyme_index)} rhyme groups"
+            )
     # Create token-free model
     print(f"Creating token-free model from: {model_path}")
     # Use device_map="auto" for multi-GPU, or device for single device
@@ -63,6 +71,7 @@ def load_token_free_model(model_path=None, config_path=None, device="cuda"):
         device_map = device
     model = TokenFreeQwen3ForCausalLM.from_pretrained(model_path,
                                                       use_token_ids=use_token_ids,
+                                                      prosody_config=prosody_config,
                                                       torch_dtype=torch.bfloat16,
                                                       device_map=device_map,
                                                       trust_remote_code=True)
@@ -106,6 +115,7 @@ def generate_poem(model,
                   user_prompt,
                   poem_type,
                   device,
+                  variant=None,
                   max_input_length=250,
                   top_k=50,
                   top_p=0.95,
@@ -118,11 +128,11 @@ def generate_poem(model,
         tokenizer: tokenizer
         user_prompt: User input prompt (e.g., "Write a poem about spring")
         poem_type: Poetry type (e.g., "五言绝句", "七言律诗", etc.)
+        variant: Metrical pattern variant name (e.g., "仄起首句不入韵"). None = random selection.
         max_input_length: Maximum input length
         top_k: top-k sampling
         top_p: top-p sampling
         temperature: Temperature
-        do_sample: Whether to sample
     
     Returns:
         generated_poem: Generated poetry text
@@ -135,6 +145,13 @@ def generate_poem(model,
 
     # Parse template to get character counts and punctuation
     segments, total_chars_needed = parse_template(masked_poem)
+
+    # Generate metrical position constraints (if available for this poem type)
+    position_constraints, variant_name = get_position_constraints(poem_type, variant_name=variant)
+    if position_constraints is not None:
+        print(f"Applying metrical pattern: {variant_name}")
+    else:
+        print(f"No metrical pattern defined for {poem_type}, generating without prosody constraints")
 
     # Build prompt (keep original template with punctuation for context)
     prompt = poetry_prompt_template.format_map({
@@ -159,6 +176,7 @@ def generate_poem(model,
             top_k=top_k,
             top_p=top_p,
             temperature=temperature,
+            position_constraints=position_constraints,
         )
     generated_poem = tokenizer.decode(output_ids, skip_special_tokens=False)
 
@@ -176,7 +194,9 @@ def main():
                         default=None,
                         help="Token-free config file path (default: ./single_char_tokens.json)")
     parser.add_argument("--user_prompt", type=str, default="Write a poem about spring", help="User prompt")
-    parser.add_argument("--poem_type", type=str, default="五言绝句", help="Poetry type")
+    parser.add_argument("--poem_type", type=str, default="五言绝句", help="Poetry type (e.g., 五言绝句, 七言律诗, 菩萨蛮, …)")
+    parser.add_argument("--variant", type=str, default=None,
+                        help="Metrical pattern variant name (e.g., 仄起首句不入韵). If omitted, a random variant is chosen.")
     parser.add_argument("--device", type=str, default="cuda", help="Device (cuda/cpu)")
 
     args = parser.parse_args()
@@ -189,14 +209,15 @@ def main():
     # Generate poetry
     print(f"\nUser prompt: {args.user_prompt}")
     print(f"Poetry type: {args.poem_type}")
-    print("-" * 50)
 
     generated_poem = generate_poem(model=model,
                                    tokenizer=tokenizer,
                                    user_prompt=args.user_prompt,
                                    poem_type=args.poem_type,
+                                   variant=args.variant,
                                    device=args.device)
 
+    print("-" * 50)
     print("\nGenerated poetry:")
     print(generated_poem)
     print("\n" + "-" * 50)
