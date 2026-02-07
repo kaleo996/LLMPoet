@@ -7,6 +7,7 @@ import torch
 import torch.nn.functional as F
 from transformers import Qwen3ForCausalLM
 from typing import Optional, List, Tuple, Dict, Any
+from utils import refine_constraint
 
 
 class TokenFreeQwen3ForCausalLM(Qwen3ForCausalLM):
@@ -226,7 +227,8 @@ class TokenFreeQwen3ForCausalLM(Qwen3ForCausalLM):
 
         Args:
             position_constraints: optional list of per-position constraint dicts
-                [{"tone": "ping"|"ze"|"*", "is_rhyme": bool}, ...].
+                [{"tone": "ping"|"ze"|"*", "is_rhyme": bool, ...}, ...].
+                May include `"gu_ping_watch_positions"` keys for dynamic 孤平 prevention.
                 Length must equal total_chars_needed when provided.
             current_rhyme_group: optional rhyme group name to use for the poem
                 (e.g., "上平聲一東"). If None, the rhyme group will be
@@ -248,6 +250,7 @@ class TokenFreeQwen3ForCausalLM(Qwen3ForCausalLM):
         if current_rhyme_group is not None and current_rhyme_group not in self.rhyme_index:
             raise ValueError(f"Invalid rhyme group: {current_rhyme_group}. Valid groups: {list(self.rhyme_index.keys())}")
         global_char_idx = 0
+        generated_tones: Dict[int, str] = {}  # idx -> "ping"|"ze" for 孤平 checks
 
         # Generate total_chars_needed tokens
         for _ in range(total_chars_needed):
@@ -263,12 +266,23 @@ class TokenFreeQwen3ForCausalLM(Qwen3ForCausalLM):
             constraint = None
             if (position_constraints is not None and global_char_idx < len(position_constraints)):
                 constraint = position_constraints[global_char_idx]
+                # Dynamically tighten constraint to prevent 孤平
+                constraint = refine_constraint(constraint, generated_tones)
                 position_mask = self._build_position_mask(constraint, current_rhyme_group)
 
             token_id = self._sample_next_token(
                 logits, top_k=top_k, top_p=top_p, temperature=temperature,
                 position_mask=position_mask,
             )
+
+            # Track generated tone for dynamic 孤平 prevention
+            # Prioritize applied constraint tone for strict positions (handles polyphonic characters better)
+            if constraint is not None and constraint["tone"] in ("ping", "ze"):
+                generated_tones[global_char_idx] = constraint["tone"]
+            elif self.ping_mask[token_id]:
+                generated_tones[global_char_idx] = "ping"
+            elif self.ze_mask[token_id]:
+                generated_tones[global_char_idx] = "ze"
 
             # Update rhyme group on first rhyme position
             if constraint is not None and constraint["is_rhyme"]:
