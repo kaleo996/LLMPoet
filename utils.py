@@ -294,6 +294,9 @@ def get_position_constraints(poem_type, variant_name=None):
 
     variant = variants[variant_idx]
 
+    # Determine if the first line is a non-rhyming line (首句不入韵)
+    first_line_no_rhyme = (0 not in variant["rhyme_lines"])
+
     constraints = []
     global_offset = 0  # global index of the starting character of the current line
     for line_idx, line_pattern in enumerate(variant["lines"]):
@@ -303,8 +306,13 @@ def get_position_constraints(poem_type, variant_name=None):
         gu_ping_links = _detect_gu_ping_links(line_pattern)           # 孤平
 
         for char_idx, tone_char in enumerate(line_pattern):
-            is_rhyme = (line_idx in variant["rhyme_lines"] and char_idx == len(line_pattern) - 1)
+            is_last_char_of_line = (char_idx == len(line_pattern) - 1)
+            is_rhyme = (line_idx in variant["rhyme_lines"] and is_last_char_of_line)
             constraint = {"tone": _TONE_MAP[tone_char], "is_rhyme": is_rhyme}
+
+            # 首句不入韵, explicitly forbid first line's last character from matching the rhyme group
+            if first_line_no_rhyme and line_idx == 0 and is_last_char_of_line:
+                constraint["is_anti_rhyme"] = True
 
             # 三平尾 / 三仄尾 prevention
             if san_ping_wei == char_idx:
@@ -315,7 +323,7 @@ def get_position_constraints(poem_type, variant_name=None):
 
             # 孤平 prevention metadata (dynamic, needs to be applied at generation time)
             # Note: 孤平 only applies to lines ending in P; 三仄尾 applies to lines
-            # ending in ZZ — they are mutually exclusive, so only san_ping_wei can
+            # ending in ZZ - they are mutually exclusive, so only san_ping_wei can
             # conflict with gu_ping_links here.
             if char_idx in gu_ping_links:
                 if san_ping_wei == char_idx:

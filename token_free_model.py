@@ -81,19 +81,23 @@ class TokenFreeQwen3ForCausalLM(Qwen3ForCausalLM):
         self,
         constraint: dict,
         current_rhyme_group: Optional[str],
+        anti_rhyme_groups: Optional[set] = None,
     ) -> Optional[torch.Tensor]:
         """
         Build a position-specific boolean mask based on tone and rhyme constraints.
 
         Args:
-            constraint: {"tone": "ping"|"ze"|"*", "is_rhyme": bool}
+            constraint: {"tone": "ping"|"ze"|"*", "is_rhyme": bool, "is_anti_rhyme": bool (optional)}
             current_rhyme_group: The rhyme group already chosen for this poem (None if not yet determined).
+            anti_rhyme_groups: Set of rhyme group names that must be avoided at rhyme
+                positions (populated from 首句不入韵 - the first line's last character).
 
         Returns:
             Boolean tensor of shape (vocab_size,) or None if no extra constraint.
         """
         tone = constraint["tone"]
         is_rhyme = constraint["is_rhyme"]
+        is_anti_rhyme = constraint.get("is_anti_rhyme", False)
 
         # Tone mask
         if tone == "ping":
@@ -114,6 +118,36 @@ class TokenFreeQwen3ForCausalLM(Qwen3ForCausalLM):
                 mask = mask & rhyme_mask
             else:
                 mask = rhyme_mask
+
+        # Anti-rhyme mask for is_anti_rhyme position (首句不入韵):
+        # When rhyme group is already known (user-specified), explicitly exclude it.
+        # When rhyme group is not yet known, skip for now, and the constraint will be enforced
+        # in reverse at subsequent rhyme positions via anti_rhyme_groups.
+        if is_anti_rhyme and current_rhyme_group is not None:
+            vocab_size = self.config.vocab_size
+            anti_rhyme_mask = torch.ones(vocab_size, dtype=torch.bool)
+            if current_rhyme_group in self.rhyme_index:
+                rhyme_ids = self.rhyme_index[current_rhyme_group]
+                anti_rhyme_mask[rhyme_ids] = False
+            if mask is not None:
+                mask = mask & anti_rhyme_mask
+            else:
+                mask = anti_rhyme_mask
+
+        # Anti-rhyme enforcement at rhyme positions:
+        # When the rhyme group is not yet determined but anti_rhyme_groups is populated
+        # from a 首句不入韵 first line, exclude tokens belonging to those groups so
+        # the auto-detected rhyme group won't collide with the first line's ending.
+        if is_rhyme and current_rhyme_group is None and anti_rhyme_groups:
+            vocab_size = self.config.vocab_size
+            anti_mask = torch.ones(vocab_size, dtype=torch.bool)
+            for group_name in anti_rhyme_groups:
+                if group_name in self.rhyme_index:
+                    anti_mask[self.rhyme_index[group_name]] = False
+            if mask is not None:
+                mask = mask & anti_mask
+            else:
+                mask = anti_mask
 
         return mask
 
@@ -251,6 +285,7 @@ class TokenFreeQwen3ForCausalLM(Qwen3ForCausalLM):
             raise ValueError(f"Invalid rhyme group: {current_rhyme_group}. Valid groups: {list(self.rhyme_index.keys())}")
         global_char_idx = 0
         generated_tones: Dict[int, str] = {}  # idx -> "ping"|"ze" for 孤平 checks
+        anti_rhyme_groups: set = set() # 首句不入韵, rhyme groups of 1st line's last char that subsequent rhyme positions must avoid
 
         # Generate total_chars_needed tokens
         for _ in range(total_chars_needed):
@@ -268,7 +303,7 @@ class TokenFreeQwen3ForCausalLM(Qwen3ForCausalLM):
                 constraint = position_constraints[global_char_idx]
                 # Dynamically tighten constraint to prevent 孤平
                 constraint = refine_constraint(constraint, generated_tones)
-                position_mask = self._build_position_mask(constraint, current_rhyme_group)
+                position_mask = self._build_position_mask(constraint, current_rhyme_group, anti_rhyme_groups)
 
             token_id = self._sample_next_token(
                 logits, top_k=top_k, top_p=top_p, temperature=temperature,
@@ -283,6 +318,13 @@ class TokenFreeQwen3ForCausalLM(Qwen3ForCausalLM):
                 generated_tones[global_char_idx] = "ping"
             elif self.ze_mask[token_id]:
                 generated_tones[global_char_idx] = "ze"
+
+            # 首句不入韵
+            if (constraint is not None
+                    and constraint.get("is_anti_rhyme", False)
+                    and current_rhyme_group is None):
+                groups = self.token_to_ping_rhyme_groups.get(token_id, [])
+                anti_rhyme_groups.update(groups)
 
             # Update rhyme group on first rhyme position
             if constraint is not None and constraint["is_rhyme"]:
