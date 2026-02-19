@@ -1,5 +1,38 @@
 import random
 
+# ---------------------------------------------------------------------------
+# Script variants: simplified (sc) / traditional (tc) Chinese
+# ---------------------------------------------------------------------------
+
+POEM_TYPE_TC = {
+    "五言绝句": "五言絕句",
+    "七言绝句": "七言絕句",
+    "五言律诗": "五言律詩",
+    "七言律诗": "七言律詩",
+    "菩萨蛮": "菩薩蠻",
+    "沁园春": "沁園春",
+    "清平乐": "清平樂",
+    "如梦令": "如夢令",
+    "蝶恋花": "蝶戀花",
+    "水调歌头": "水調歌頭",
+    "卜算子": "卜算子",
+    "减字木兰花": "減字木蘭花",
+    "满江红": "滿江紅",
+}
+
+
+def get_poem_type_display(poem_type: str, script: str = "simplified") -> str:
+    """Return the display name of a poem type in the requested script.
+
+    Args:
+        poem_type: Internal key (always simplified), e.g. "五言绝句".
+        script: "simplified" or "traditional".
+    """
+    if script == "traditional":
+        return POEM_TYPE_TC.get(poem_type, poem_type)
+    return poem_type
+
+
 # Poetry template dictionary, using mask markers to indicate positions to fill
 masked_poem_dict = {
     "五言绝句":
@@ -30,13 +63,32 @@ masked_poem_dict = {
     "<|extra_1|><|extra_1|><|extra_1|><|extra_1|>，<|extra_1|><|extra_1|><|extra_1|>、<|extra_1|><|extra_1|><|extra_1|><|extra_1|>。<|extra_1|><|extra_1|><|extra_1|>、<|extra_1|><|extra_1|><|extra_1|><|extra_1|>，<|extra_1|><|extra_1|><|extra_1|><|extra_1|>。<|extra_1|><|extra_1|><|extra_1|><|extra_1|><|extra_1|><|extra_1|><|extra_1|>，<|extra_1|><|extra_1|><|extra_1|><|extra_1|><|extra_1|><|extra_1|><|extra_1|>。<|extra_1|><|extra_1|><|extra_1|>、<|extra_1|><|extra_1|><|extra_1|><|extra_1|><|extra_1|>，<|extra_1|><|extra_1|><|extra_1|>。<|extra_1|><|extra_1|><|extra_1|>，<|extra_1|><|extra_1|><|extra_1|>。<|extra_1|><|extra_1|><|extra_1|>，<|extra_1|><|extra_1|><|extra_1|>。<|extra_1|><|extra_1|><|extra_1|>，<|extra_1|><|extra_1|><|extra_1|><|extra_1|><|extra_1|><|extra_1|>。<|extra_1|><|extra_1|><|extra_1|><|extra_1|><|extra_1|><|extra_1|><|extra_1|><|extra_1|>，<|extra_1|><|extra_1|><|extra_1|><|extra_1|><|extra_1|><|extra_1|><|extra_1|>。<|extra_1|><|extra_1|><|extra_1|>、<|extra_1|><|extra_1|><|extra_1|><|extra_1|><|extra_1|>，<|extra_1|><|extra_1|><|extra_1|>。"
 }
 
-poetry_prompt_template = '''<|im_start|>user
+poetry_prompt_template_sc = '''<|im_start|>user
 请创作一首{poem_type}，主题：{user_prompt}。
 请按照以下模板填写，每个<|extra_1|>位置填入一个汉字：
 {masked_poem}<|im_end|>
 <|im_start|>assistant
 现在为您创作一首主题为“{user_prompt}”的{poem_type}：
 '''
+
+
+poetry_prompt_template_tc = '''<|im_start|>user
+請創作一首{poem_type}，主題：{user_prompt}。
+請按照以下模板填寫，每個<|extra_1|>位置填入一個漢字：
+{masked_poem}<|im_end|>
+<|im_start|>assistant
+現在為您創作一首主題為「{user_prompt}」的{poem_type}：
+'''
+
+PROMPT_TEMPLATES = {
+    "simplified": poetry_prompt_template_sc,
+    "traditional": poetry_prompt_template_tc,
+}
+
+
+def get_prompt_template(script: str = "simplified") -> str:
+    """Return the prompt template for the given script."""
+    return PROMPT_TEMPLATES[script]
 
 # ---------------------------------------------------------------------------
 # Metrical patterns for regulated verse (近体诗)

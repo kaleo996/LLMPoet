@@ -12,7 +12,7 @@ current_dir = os.path.dirname(os.path.abspath(__file__))
 
 from transformers import AutoTokenizer
 from token_free_model import TokenFreeQwen3ForCausalLM
-from utils import masked_poem_dict, poetry_prompt_template, get_position_constraints
+from utils import masked_poem_dict, get_prompt_template, get_poem_type_display, get_position_constraints
 
 
 def load_token_free_model(model_path=None, config_path=None, device="cuda"):
@@ -117,6 +117,7 @@ def generate_poem(model,
                   device,
                   variant=None,
                   rhyme_group=None,
+                  script="simplified",
                   max_input_length=250,
                   top_k=50,
                   top_p=0.95,
@@ -131,6 +132,7 @@ def generate_poem(model,
         poem_type: Poetry type (e.g., "五言绝句", "七言律诗", etc.)
         variant: Metrical pattern variant name (e.g., "仄起首句不入韵"). None = random selection.
         rhyme_group: Rhyme group name (e.g., "上平聲一東"). None = auto-detect from first rhyme position.
+        script: Output script, "simplified" or "traditional"
         max_input_length: Maximum input length
         top_k: top-k sampling
         top_p: top-p sampling
@@ -153,11 +155,13 @@ def generate_poem(model,
     if position_constraints is not None:
         print(f"Applying metrical pattern: {variant_name}")
 
-    # Build prompt (keep original template with punctuation for context)
-    prompt = poetry_prompt_template.format_map({
+    # Build prompt with the appropriate script template
+    prompt_template = get_prompt_template(script)
+    display_type = get_poem_type_display(poem_type, script)
+    prompt = prompt_template.format_map({
         "user_prompt": user_prompt,
         "masked_poem": masked_poem,
-        "poem_type": poem_type
+        "poem_type": display_type,
     })
 
     # Encode input
@@ -204,6 +208,9 @@ def main():
     parser.add_argument("--rhyme_group", type=str, default=None,
                         help="Pingshui rhyme group name (e.g., 上平聲一東, 下平聲七陽). "
                              "If omitted, the rhyme group is auto-detected from the first rhyme position generated.")
+    parser.add_argument("--script", type=str, default="simplified",
+                        choices=["simplified", "traditional"],
+                        help="Output script: simplified or traditional Chinese (default: simplified)")
     parser.add_argument("--device", type=str, default="cuda", help="Device (cuda/cpu)")
 
     args = parser.parse_args()
@@ -216,6 +223,7 @@ def main():
     # Generate poetry
     print(f"\nUser prompt: {args.user_prompt}")
     print(f"Poetry type: {args.poem_type}")
+    print(f"Script: {args.script}")
 
     generated_poem = generate_poem(model=model,
                                    tokenizer=tokenizer,
@@ -223,6 +231,7 @@ def main():
                                    poem_type=args.poem_type,
                                    variant=args.variant,
                                    rhyme_group=args.rhyme_group,
+                                   script=args.script,
                                    device=args.device)
 
     print("-" * 50)

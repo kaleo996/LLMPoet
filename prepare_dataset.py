@@ -16,7 +16,14 @@ import subprocess
 from typing import List, Tuple, Optional, Dict
 from collections import Counter, defaultdict
 
-from utils import masked_poem_dict, poetry_prompt_template
+import opencc
+
+from utils import (
+    masked_poem_dict,
+    poetry_prompt_template_sc,
+    poetry_prompt_template_tc,
+    get_poem_type_display,
+)
 
 POEM_TYPE_MAP = {
     (4, 5): "五言绝句",
@@ -119,19 +126,24 @@ def reconstruct_poem_text(lines: List[Tuple[str, str]]) -> str:
     return "".join(text + punct for text, punct in lines)
 
 
-def format_sample(poem_type: str, title: str, poem_text: str) -> str:
-    """Build a training text reusing `poetry_prompt_template` from utils.py.
+def format_sample(poem_type: str, title: str, poem_text: str,
+                   script: str = "traditional") -> str:
+    """Build a training text using the prompt template.
 
-    Returns the chat-formatted string used at inference time
-    with `<|im_start|>`/<|im_end|>` markers, followed by the poem
-    and a closing `<|im_end|>` token.
+    Args:
+        poem_type: Internal key (simplified), e.g. "五言绝句".
+        title: Poem title in the target script.
+        poem_text: Poem body in the target script.
+        script: "simplified" or "traditional".
     """
     masked_poem = masked_poem_dict[poem_type]
+    template = poetry_prompt_template_tc if script == "traditional" else poetry_prompt_template_sc
+    display_type = get_poem_type_display(poem_type, script)
 
-    return poetry_prompt_template.format_map({
+    return template.format_map({
         "user_prompt": title,
         "masked_poem": masked_poem,
-        "poem_type": poem_type,
+        "poem_type": display_type,
     }) + poem_text + "<|im_end|>\n"
 
 
@@ -158,6 +170,7 @@ def load_tang_poems(tang_dir: str) -> List[Dict]:
 
 def process_poems(raw_poems: List[Dict]) -> List[Dict]:
     """Filter, classify, deduplicate, and format poems into training samples."""
+    t2s = opencc.OpenCC("t2s")
     stats = Counter()
     seen_texts = set()
     samples_by_type = defaultdict(list)
@@ -171,64 +184,77 @@ def process_poems(raw_poems: List[Dict]) -> List[Dict]:
             stats["skip_missing_fields"] += 1
             continue
 
-        # Extract individual lines
         lines = extract_lines(paragraphs)
         if not lines:
             stats["skip_no_lines"] += 1
             continue
 
-        # Classify
         poem_type = classify_regulated_verse(lines)
         if poem_type is None:
             stats["skip_not_regulated"] += 1
             continue
 
-        # Reconstruct and deduplicate
         poem_text = reconstruct_poem_text(lines)
         if poem_text in seen_texts:
             stats["skip_duplicate"] += 1
             continue
         seen_texts.add(poem_text)
 
-        # Clean title: remove parenthetical annotations like （一作xxx）
         title = re.sub(r'[\(（].*?[\)）]', '', title).strip()
         if not title:
             stats["skip_empty_title"] += 1
             continue
 
-        # Build training sample
-        text = format_sample(poem_type, title, poem_text)
-        sample = {
-            "text": text,
+        author = poem.get("author", "")
+
+        # Traditional sample (original data from 全唐诗)
+        tc_text = format_sample(poem_type, title, poem_text, script="traditional")
+        samples_by_type[poem_type].append({
+            "text": tc_text,
             "meta": {
-                "author": poem.get("author", ""),
+                "author": author,
                 "title": title,
                 "poem_type": poem_type,
+                "script": "traditional",
             },
-        }
-        samples_by_type[poem_type].append(sample)
+        })
+
+        # Simplified sample (converted via opencc)
+        sc_title = t2s.convert(title)
+        sc_poem_text = t2s.convert(poem_text)
+        sc_text = format_sample(poem_type, sc_title, sc_poem_text, script="simplified")
+        samples_by_type[poem_type].append({
+            "text": sc_text,
+            "meta": {
+                "author": author,
+                "title": sc_title,
+                "poem_type": poem_type,
+                "script": "simplified",
+            },
+        })
+
         stats[f"kept_{poem_type}"] += 1
 
-    stats["kept_total"] = sum(len(v) for v in samples_by_type.values())
+    stats["kept_poems"] = sum(len(v) // 2 for v in samples_by_type.values())
+    stats["kept_samples"] = sum(len(v) for v in samples_by_type.values())
 
-    # Print statistics
-    print("\n" + "=" * 50)
+    print("\n" + "=" * 55)
     print("  Processing Statistics")
-    print("=" * 50)
+    print("=" * 55)
     print(f"  Total raw poems:            {stats['total']:>6}")
     print(f"  Skipped (missing fields):   {stats['skip_missing_fields']:>6}")
     print(f"  Skipped (no lines):         {stats['skip_no_lines']:>6}")
     print(f"  Skipped (not regulated):    {stats['skip_not_regulated']:>6}")
     print(f"  Skipped (duplicate):        {stats['skip_duplicate']:>6}")
     print(f"  Skipped (empty title):      {stats['skip_empty_title']:>6}")
-    print("-" * 50)
+    print("-" * 55)
     for poem_type in POEM_TYPE_MAP.values():
         count = len(samples_by_type.get(poem_type, []))
-        print(f"  Kept {poem_type}:           {count:>6}")
-    print(f"  Kept total:                 {stats['kept_total']:>6}")
-    print("=" * 50)
+        print(f"  {poem_type} (tc+sc):       {count:>6}")
+    print(f"  Kept poems (unique):        {stats['kept_poems']:>6}")
+    print(f"  Kept samples (tc+sc):       {stats['kept_samples']:>6}")
+    print("=" * 55)
 
-    # Flatten
     all_samples = []
     for poem_type in POEM_TYPE_MAP.values():
         all_samples.extend(samples_by_type.get(poem_type, []))
@@ -256,17 +282,22 @@ def split_and_save(
     for path, data in [(train_path, train_samples), (eval_path, eval_samples)]:
         with open(path, "w", encoding="utf-8") as f:
             for sample in data:
-                row = {"text": sample["text"]}
+                row = {"text": sample["text"], "script": sample["meta"]["script"]}
                 f.write(json.dumps(row, ensure_ascii=False) + "\n")
 
     print(f"\n[save] Training samples:   {len(train_samples):>6}  →  {train_path}")
     print(f"[save] Evaluation samples: {len(eval_samples):>6}  →  {eval_path}")
 
-    # Training set type distribution
+    # Training set distribution
     type_dist = Counter(s["meta"]["poem_type"] for s in train_samples)
+    script_dist = Counter(s["meta"]["script"] for s in train_samples)
     print("\n[save] Training set distribution:")
+    print("  By type:")
     for pt, count in type_dist.most_common():
-        print(f"  {pt}: {count}")
+        print(f"    {pt}: {count}")
+    print("  By script:")
+    for sc, count in script_dist.most_common():
+        print(f"    {sc}: {count}")
 
 
 def preview_samples(samples: List[Dict], n: int = 3):
@@ -277,7 +308,8 @@ def preview_samples(samples: List[Dict], n: int = 3):
     previews = random.sample(samples, min(n, len(samples)))
     for i, sample in enumerate(previews, 1):
         meta = sample["meta"]
-        print(f"\n--- Sample {i} [{meta['poem_type']}] {meta['author']}《{meta['title']}》---")
+        script_tag = "繁" if meta.get("script") == "traditional" else "简"
+        print(f"\n--- Sample {i} [{meta['poem_type']}][{script_tag}] {meta['author']}《{meta['title']}》---")
         print(sample["text"])
     print()
 
