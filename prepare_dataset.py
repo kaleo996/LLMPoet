@@ -205,18 +205,12 @@ def process_poems(raw_poems: List[Dict]) -> List[Dict]:
             stats["skip_empty_title"] += 1
             continue
 
-        author = poem.get("author", "")
-
         # Traditional sample (original data from 全唐诗)
         tc_text = format_sample(poem_type, title, poem_text, script="traditional")
         samples_by_type[poem_type].append({
             "text": tc_text,
-            "meta": {
-                "author": author,
-                "title": title,
-                "poem_type": poem_type,
-                "script": "traditional",
-            },
+            "poem_type": poem_type,
+            "script": "traditional",
         })
 
         # Simplified sample (converted via opencc)
@@ -225,12 +219,8 @@ def process_poems(raw_poems: List[Dict]) -> List[Dict]:
         sc_text = format_sample(poem_type, sc_title, sc_poem_text, script="simplified")
         samples_by_type[poem_type].append({
             "text": sc_text,
-            "meta": {
-                "author": author,
-                "title": sc_title,
-                "poem_type": poem_type,
-                "script": "simplified",
-            },
+            "poem_type": poem_type,
+            "script": "simplified",
         })
 
         stats[f"kept_{poem_type}"] += 1
@@ -282,15 +272,14 @@ def split_and_save(
     for path, data in [(train_path, train_samples), (eval_path, eval_samples)]:
         with open(path, "w", encoding="utf-8") as f:
             for sample in data:
-                row = {"text": sample["text"], "script": sample["meta"]["script"]}
-                f.write(json.dumps(row, ensure_ascii=False) + "\n")
+                f.write(json.dumps(sample, ensure_ascii=False) + "\n")
 
     print(f"\n[save] Training samples:   {len(train_samples):>6}  →  {train_path}")
     print(f"[save] Evaluation samples: {len(eval_samples):>6}  →  {eval_path}")
 
     # Training set distribution
-    type_dist = Counter(s["meta"]["poem_type"] for s in train_samples)
-    script_dist = Counter(s["meta"]["script"] for s in train_samples)
+    type_dist = Counter(s["poem_type"] for s in train_samples)
+    script_dist = Counter(s["script"] for s in train_samples)
     print("\n[save] Training set distribution:")
     print("  By type:")
     for pt, count in type_dist.most_common():
@@ -307,9 +296,8 @@ def preview_samples(samples: List[Dict], n: int = 3):
     print(f"{'=' * 50}")
     previews = random.sample(samples, min(n, len(samples)))
     for i, sample in enumerate(previews, 1):
-        meta = sample["meta"]
-        script_tag = "繁" if meta.get("script") == "traditional" else "简"
-        print(f"\n--- Sample {i} [{meta['poem_type']}][{script_tag}] {meta['author']}《{meta['title']}》---")
+        script_tag = "繁" if sample.get("script") == "traditional" else "简"
+        print(f"\n--- Sample {i} [{sample['poem_type']}][{script_tag}] ---")
         print(sample["text"])
     print()
 
