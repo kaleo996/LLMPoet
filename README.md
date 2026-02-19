@@ -76,16 +76,43 @@ Parameters:
 - 减字木兰花
 - 满江红
 
+### 3. Prepare Fine-tuning Dataset
+
+Download the Complete Tang Poetry (全唐诗) and prepare the training data (filtered to regulated verse only):
+
+```bash
+# Auto-download and prepare dataset
+python prepare_dataset.py --download
+
+# Or use an existing local copy of the chinese-poetry repo
+python prepare_dataset.py --data_dir ./data/chinese-poetry
+
+# Customize output directory and eval split ratio
+python prepare_dataset.py --download --output_dir ./data/sft --eval_ratio 0.1
+```
+
+This will:
+1. Download the [chinese-poetry](https://github.com/chinese-poetry/chinese-poetry) repository (sparse checkout, 全唐诗 only)
+2. Filter for regulated verse (格律诗): 五言绝句, 七言绝句, 五言律诗, 七言律诗
+3. Format each poem into the project's chat template (matching the inference prompt format)
+4. Output `train.jsonl` and `eval.jsonl` to the specified directory
+
 ## Code Structure
 
 ```
 LLMPoet/
 ├── models/
-│   └── Qwen3-8B/        # Downloaded Qwen3-8B model (you need to download this)
-├── token_free_model.py  # Token-free model wrapper class
-├── utils.py             # Utility functions (templates, formatting, etc.)
-├── generate.py          # Generation script
-├── prune_tokenizer.py   # Identify single character tokens
+│   └── Qwen3-8B/           # Downloaded Qwen3-8B model (you need to download this)
+├── data/
+│   ├── chinese-poetry/     # Downloaded chinese-poetry repo (auto or manual)
+│   └── training/           # Prepared JSONL training data
+│       ├── train.jsonl
+│       └── eval.jsonl
+├── token_free_model.py     # Token-free model wrapper class
+├── utils.py                # Utility functions (templates, formatting, etc.)
+├── generate.py             # Generation script
+├── prepare_dataset.py      # Dataset preparation for fine-tuning
+├── prune_tokenizer.py      # Identify single character tokens
 └── README.md
 ```
 

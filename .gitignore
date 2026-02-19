@@ -9,6 +9,9 @@ models/
 token_free_config.json
 single_char_tokens.json
 
+# Data directories (downloaded dataset + prepared training data)
+data/
+
 # Python
 __pycache__/
 *.py[cod]
