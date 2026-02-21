@@ -12,6 +12,9 @@ single_char_tokens.json
 # Data directories (downloaded dataset + prepared training data)
 data/
 
+# Fine-tuning outputs (checkpoints, adapters, merged models)
+output/
+
 # Python
 __pycache__/
 *.py[cod]
