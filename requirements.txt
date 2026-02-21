@@ -1,0 +1,11 @@
+torch
+transformers
+accelerate
+datasets
+peft
+bitsandbytes
+OpenCC
+PyYAML
+trl
+wandb
+deepspeed
