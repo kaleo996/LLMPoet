@@ -6,7 +6,7 @@ LLM poetry generation system based on Qwen3-8B
 
 1. **Token-free Pruning**: Prune Qwen3-8B to only output single Chinese character tokens
 2. **Poetry Template Prompts**: Use mask templates to indicate character count requirements for each line
-3. **Multiple Poetry Formats**: Support for various formats like 五言绝句, 七言律诗, and 如梦令
+3. **Multiple Poetry Formats**: Support for various formats like 五言绝句, 七言绝句, 五言律诗, 七言律诗
 
 ## Dependencies
 
@@ -71,7 +71,7 @@ Parameters:
 - `--model_path`: Local model path (default: ./models/Qwen3-8B)
 - `--config_path`: Token-free config file path (default: ./token_free_config.json)
 - `--user_prompt`: User prompt
-- `--poem_type`: Poetry type (五言绝句, 七言律诗, 如梦令, etc.)
+- `--poem_type`: Poetry type (五言绝句, 七言律诗, etc.)
 - `--device`: Device (cuda/cpu)
 
 ### Supported Poetry Types
@@ -80,15 +80,6 @@ Parameters:
 - 五言律诗
 - 七言绝句
 - 七言律诗
-- 菩萨蛮
-- 沁园春
-- 清平乐
-- 如梦令
-- 蝶恋花
-- 水调歌头
-- 卜算子
-- 减字木兰花
-- 满江红
 
 ### 3. Prepare Fine-tuning Dataset
 

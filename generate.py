@@ -38,7 +38,7 @@ def load_token_free_model(model_path=None, config_path=None, device="cuda"):
                                 f"See README.md for download instructions.")
 
     print(f"Loading tokenizer from: {model_path}")
-    tokenizer = AutoTokenizer.from_pretrained(model_path, trust_remote_code=True)
+    tokenizer = AutoTokenizer.from_pretrained(model_path)
 
     # Set default config path
     if config_path is None:
@@ -73,8 +73,7 @@ def load_token_free_model(model_path=None, config_path=None, device="cuda"):
                                                       use_token_ids=use_token_ids,
                                                       prosody_config=prosody_config,
                                                       torch_dtype=torch.bfloat16,
-                                                      device_map=device_map,
-                                                      trust_remote_code=True)
+                                                      device_map=device_map)
 
     model.eval()
     print("Model loaded successfully")
@@ -96,14 +95,14 @@ def parse_template(masked_poem):
     segments = []
 
     # Find all sequences of one or more <|extra_1|> followed by punctuation or end
-    _placeholder = '<|extra_1|>'
+    placeholder = '<|extra_1|>'
     pattern = r'(<\|extra_1\|>)+([，。、；]?)'
 
     matches = re.finditer(pattern, masked_poem)
     for match in matches:
         punct = match.group(2) or ''
         placeholder_len = len(match.group(0)) - len(punct)
-        char_count = placeholder_len // len(_placeholder)
+        char_count = placeholder_len // len(placeholder)
         segments.append((char_count, punct))
 
     total_chars = sum(seg[0] for seg in segments)
@@ -202,7 +201,7 @@ def main():
                         default=None,
                         help="Token-free config file path (default: ./single_char_tokens.json)")
     parser.add_argument("--user_prompt", type=str, default="Write a poem about spring", help="User prompt")
-    parser.add_argument("--poem_type", type=str, default="五言绝句", help="Poetry type (e.g., 五言绝句, 七言律诗, 菩萨蛮, …)")
+    parser.add_argument("--poem_type", type=str, default="五言绝句", help="Poetry type (e.g., 五言绝句, 七言律诗, ...)")
     parser.add_argument("--variant", type=str, default=None,
                         help="Metrical pattern variant name (e.g., 仄起首句不入韵). If omitted, a random variant is chosen.")
     parser.add_argument("--rhyme_group", type=str, default=None,

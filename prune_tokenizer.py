@@ -74,7 +74,7 @@ def annotate_pingshui(single_char_tokens, single_char_token_ids):
     char_to_info = defaultdict(list)
     d = classifier.ping_ze_dict
     for tone_key in ("ping", "ze"):
-        for _section_name, groups in d[tone_key].items():
+        for _, groups in d[tone_key].items():
             for group_name, chars_str in groups.items():
                 chars_str = chars_str[0]
                 for ch in chars_str:

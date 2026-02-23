@@ -33,10 +33,10 @@ POEM_TYPE_MAP = {
 }
 
 # Regex: a string of non-punctuation characters followed by exactly one punctuation mark
-_LINE_PATTERN = re.compile(r'([^，。；！？、：\s]+)([，。；！？、：])')
+LINE_PATTERN = re.compile(r'([^，。；！？、：\s]+)([，。；！？、：])')
 
 # Characters we consider valid in a poem line (CJK Unified Ideographs)
-_CJK_RE = re.compile(r'^[\u4e00-\u9fff]+$')
+CJK_RE = re.compile(r'^[\u4e00-\u9fff]+$')
 
 
 # Data download
@@ -83,7 +83,7 @@ def extract_lines(paragraphs: List[str]) -> List[Tuple[str, str]]:
            ("欲穷千里目", "，"), ("更上一层楼", "。")]
     """
     full_text = "".join(p.strip() for p in paragraphs)
-    return _LINE_PATTERN.findall(full_text)
+    return LINE_PATTERN.findall(full_text)
 
 
 def classify_regulated_verse(lines: List[Tuple[str, str]]) -> Optional[str]:
@@ -115,7 +115,7 @@ def classify_regulated_verse(lines: List[Tuple[str, str]]) -> Optional[str]:
 
     # Every character must be a CJK ideograph
     for text, _ in lines:
-        if not _CJK_RE.match(text):
+        if not CJK_RE.match(text):
             return None
 
     return POEM_TYPE_MAP.get((num_lines, chars_per_line))
