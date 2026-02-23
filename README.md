@@ -22,6 +22,12 @@ For **inference only**, the minimal set is:
 pip install torch transformers accelerate OpenCC
 ```
 
+For the **Gradio web UI**, additionally install:
+
+```bash
+pip install gradio
+```
+
 For **fine-tuning**, you also need:
 
 ```bash
@@ -61,6 +67,8 @@ This will generate `single_char_tokens.json` and `token_free_config.json` files 
 
 ### 2. Generate Poetry
 
+#### Command Line
+
 Use the generation script to generate poetry:
 
 ```bash
@@ -73,6 +81,20 @@ Parameters:
 - `--user_prompt`: User prompt
 - `--poem_type`: Poetry type (五言绝句, 七言律诗, etc.)
 - `--device`: Device (cuda/cpu)
+
+#### Gradio Web UI
+
+Run the web interface for interactive poetry generation:
+
+```bash
+python app.py
+```
+
+This launches a Gradio app in your browser. The UI supports:
+
+- Theme/topic input
+- Poetry type, metrical pattern, and rhyme group selection
+- Output in simplified or traditional Chinese
 
 ### Supported Poetry Types
 
@@ -145,6 +167,7 @@ LLMPoet/
 ├── output/                    # Training outputs (checkpoints, adapters)
 ├── token_free_model.py        # Token-free model wrapper class
 ├── utils.py                   # Utility functions (templates, formatting, etc.)
+├── app.py                     # Gradio web UI
 ├── generate.py                # Generation script
 ├── batch_generate.py          # Batch generation script
 ├── finetune.py                # LoRA / QLoRA fine-tuning script

@@ -9,3 +9,4 @@ PyYAML
 trl
 wandb
 deepspeed
+gradio>=4.0.0
