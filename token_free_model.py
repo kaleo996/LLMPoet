@@ -7,7 +7,7 @@ import torch
 import torch.nn.functional as F
 from transformers import Qwen3ForCausalLM
 from typing import Optional, List, Tuple, Dict, Any
-from utils import refine_constraint
+from utils import refine_constraint, PING_RHYME_GROUP_NAMES
 
 
 class TokenFreeQwen3ForCausalLM(Qwen3ForCausalLM):
@@ -67,7 +67,7 @@ class TokenFreeQwen3ForCausalLM(Qwen3ForCausalLM):
         # (only 上平聲 and 下平聲 groups, used for determining rhyme in regulated verse)
         self.token_to_ping_rhyme_groups = {}
         for group_name, token_ids in rhyme_index.items():
-            if group_name.startswith("上平聲") or group_name.startswith("下平聲"):
+            if group_name in PING_RHYME_GROUP_NAMES:
                 for tid in token_ids:
                     if tid not in self.token_to_ping_rhyme_groups:
                         self.token_to_ping_rhyme_groups[tid] = []
@@ -281,8 +281,12 @@ class TokenFreeQwen3ForCausalLM(Qwen3ForCausalLM):
         # Prosody state
         current_rhyme_group: Optional[str] = rhyme_group
         # Check if current_rhyme_group is valid
-        if current_rhyme_group is not None and current_rhyme_group not in self.rhyme_index:
-            raise ValueError(f"Invalid rhyme group: {current_rhyme_group}. Valid groups: {list(self.rhyme_index.keys())}")
+        if current_rhyme_group is not None:
+            if current_rhyme_group not in PING_RHYME_GROUP_NAMES:
+                raise ValueError(
+                    f"Invalid rhyme group for regulated verse: {current_rhyme_group}. "
+                    f"Valid groups: {PING_RHYME_GROUP_NAMES}"
+                )
         global_char_idx = 0
         generated_tones: Dict[int, str] = {}  # idx -> "ping"|"ze" for 孤平 checks
         anti_rhyme_groups: set = set() # 首句不入韵, rhyme groups of 1st line's last char that subsequent rhyme positions must avoid

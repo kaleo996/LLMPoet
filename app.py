@@ -10,7 +10,7 @@ import torch
 import gradio as gr
 
 from generate import load_token_free_model, generate_poem
-from utils import masked_poem_dict, metrical_patterns
+from utils import masked_poem_dict, metrical_patterns, PING_RHYME_GROUP_NAMES
 
 # Paths
 CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -76,16 +76,13 @@ UI_STRINGS = {
 
 
 def load_rhyme_groups():
-    """Load rhyme group names from single_char_tokens.json (上平聲 and 下平聲 only)."""
+    """Load 平声韵部 names available in single_char_tokens.json."""
     with open(CONFIG_PATH, "r", encoding="utf-8") as f:
         config = json.load(f)
     rhyme_index = config.get("rhyme_index", {})
-    groups = [
-        k
-        for k in rhyme_index
-        if k.startswith("上平聲") or k.startswith("下平聲")
-    ]
-    return sorted(groups)
+    # Only 平声韵部 that have tokens in vocabulary
+    groups = [k for k in PING_RHYME_GROUP_NAMES if k in rhyme_index]
+    return groups
 
 
 def get_variant_names():
