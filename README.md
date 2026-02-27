@@ -108,14 +108,15 @@ This launches a Gradio app in your browser. The UI supports:
 Download the Complete Tang Poetry (全唐诗) and prepare the training data (filtered to regulated verse only):
 
 ```bash
+# Run from the project root (module mode) to avoid import path issues.
 # Auto-download and prepare dataset
-python prepare_dataset.py --download
+python -m data.prepare_dataset --download
 
 # Or use an existing local copy of the chinese-poetry repo
-python prepare_dataset.py --data_dir ./data/chinese-poetry
+python -m data.prepare_dataset --data_dir ./data/chinese-poetry
 
 # Customize output directory and eval split ratio
-python prepare_dataset.py --download --output_dir ./data/sft --eval_ratio 0.1
+python -m data.prepare_dataset --download --output_dir ./data/sft --eval_ratio 0.1
 ```
 
 This will:
@@ -123,6 +124,15 @@ This will:
 2. Filter for regulated verse (格律诗): 五言绝句, 七言绝句, 五言律诗, 七言律诗
 3. Format each poem into the project's chat template (matching the inference prompt format)
 4. Output `train.jsonl` and `eval.jsonl` to the specified directory
+
+### (Optional) EDA: Strict Regulated Verse Rate
+
+Use `PoemStructureChecker` to estimate how many poems in 全唐诗 strictly satisfy rhyme + ping-ze meter rules:
+
+```bash
+# Run from the project root (module mode).
+python -m data.eda
+```
 
 ### 4. Fine-tune on Complete Tang Poetry
 
@@ -156,6 +166,10 @@ LLMPoet/
 ├── models/
 │   └── Qwen3-8B/              # Downloaded Qwen3-8B model
 ├── data/
+│   ├── __init__.py            # Make data a Python package
+│   ├── utils.py               # Download/load chinese-poetry helpers
+│   ├── prepare_dataset.py     # Dataset preparation for fine-tuning
+│   ├── eda.py                 # Dataset EDA / statistics
 │   ├── chinese-poetry/        # Downloaded chinese-poetry repo
 │   └── training/              # Prepared JSONL training data
 │       ├── train.jsonl
@@ -172,7 +186,6 @@ LLMPoet/
 ├── batch_generate.py          # Batch generation script
 ├── finetune.py                # LoRA / QLoRA fine-tuning script
 ├── merge_adapter.py           # Merge LoRA adapter into base model
-├── prepare_dataset.py         # Dataset preparation for fine-tuning
 ├── prune_tokenizer.py         # Identify single character tokens
 ├── requirements.txt           # Python dependencies
 └── README.md

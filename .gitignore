@@ -1,16 +1,12 @@
 # Model files (too large for git)
-models/
-*.safetensors
-*.bin
-*.pt
-*.pth
+models/*/
 
 # Generated config files
 token_free_config.json
 single_char_tokens.json
 
 # Data directories (downloaded dataset + prepared training data)
-data/
+data/*/
 
 # Fine-tuning outputs (checkpoints, adapters, merged models)
 output/

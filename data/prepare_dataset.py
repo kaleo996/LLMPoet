@@ -9,10 +9,8 @@ template, and outputs train/eval JSONL splits.
 import os
 import json
 import re
-import glob
 import argparse
 import random
-import subprocess
 from typing import List, Tuple, Optional, Dict
 from collections import Counter, defaultdict
 
@@ -24,6 +22,7 @@ from utils import (
     poetry_prompt_template_tc,
     get_poem_type_display,
 )
+from .utils import download_chinese_poetry, load_tang_poems
 
 POEM_TYPE_MAP = {
     (4, 5): "五言绝句",
@@ -37,41 +36,6 @@ LINE_PATTERN = re.compile(r'([^，。；！？、：\s]+)([，。；！？、：
 
 # Characters we consider valid in a poem line (CJK Unified Ideographs)
 CJK_RE = re.compile(r'^[\u4e00-\u9fff]+$')
-
-
-# Data download
-def download_chinese_poetry(target_dir: str) -> str:
-    """Download chinese-poetry repo via git sparse checkout (全唐诗 only).
-
-    Returns:
-        Path to the 全唐诗 directory.
-    """
-    tang_dir = os.path.join(target_dir, "全唐诗")
-    if os.path.isdir(tang_dir) and any(f.endswith(".json") for f in os.listdir(tang_dir)):
-        print(f"[download] 全唐诗 already exists at {tang_dir}, skipping download.")
-        return tang_dir
-
-    print(f"[download] Cloning chinese-poetry repo (sparse checkout) into {target_dir} ...")
-    os.makedirs(os.path.dirname(target_dir) or ".", exist_ok=True)
-
-    # Sparse clone: only metadata, no blobs yet
-    subprocess.run(
-        [
-            "git", "clone", "--depth", "1",
-            "--filter=blob:none", "--sparse",
-            "https://github.com/chinese-poetry/chinese-poetry.git",
-            target_dir,
-        ],
-        check=True,
-    )
-    # Check out only the 全唐诗 folder
-    subprocess.run(
-        ["git", "sparse-checkout", "set", "全唐诗"],
-        cwd=target_dir,
-        check=True,
-    )
-    print(f"[download] Done. Tang poetry files at {tang_dir}")
-    return tang_dir
 
 
 def extract_lines(paragraphs: List[str]) -> List[Tuple[str, str]]:
@@ -147,27 +111,6 @@ def format_sample(poem_type: str, title: str, poem_text: str,
     }) + poem_text + "<|im_end|>\n"
 
 
-def load_tang_poems(tang_dir: str) -> List[Dict]:
-    """Load all poem objects from 全唐诗 JSON files."""
-    json_files = sorted(glob.glob(os.path.join(tang_dir, "poet.tang.*.json")))
-    if not json_files:
-        # Fallback: try any JSON file in the directory
-        json_files = sorted(glob.glob(os.path.join(tang_dir, "*.json")))
-    if not json_files:
-        raise FileNotFoundError(f"No JSON files found in {tang_dir}")
-
-    poems = []
-    for fpath in json_files:
-        with open(fpath, "r", encoding="utf-8") as f:
-            data = json.load(f)
-            if isinstance(data, list):
-                poems.extend(data)
-            elif isinstance(data, dict):
-                poems.append(data)
-    print(f"[load] Loaded {len(poems)} raw poems from {len(json_files)} files.")
-    return poems
-
-
 def process_poems(raw_poems: List[Dict]) -> List[Dict]:
     """Filter, classify, deduplicate, and format poems into training samples."""
     t2s = opencc.OpenCC("t2s")
@@ -228,22 +171,22 @@ def process_poems(raw_poems: List[Dict]) -> List[Dict]:
     stats["kept_poems"] = sum(len(v) // 2 for v in samples_by_type.values())
     stats["kept_samples"] = sum(len(v) for v in samples_by_type.values())
 
-    print("\n" + "=" * 55)
+    print("\n" + "=" * 50)
     print("  Processing Statistics")
-    print("=" * 55)
+    print("=" * 50)
     print(f"  Total raw poems:            {stats['total']:>6}")
     print(f"  Skipped (missing fields):   {stats['skip_missing_fields']:>6}")
     print(f"  Skipped (no lines):         {stats['skip_no_lines']:>6}")
     print(f"  Skipped (not regulated):    {stats['skip_not_regulated']:>6}")
     print(f"  Skipped (duplicate):        {stats['skip_duplicate']:>6}")
     print(f"  Skipped (empty title):      {stats['skip_empty_title']:>6}")
-    print("-" * 55)
+    print("-" * 50)
     for poem_type in POEM_TYPE_MAP.values():
         count = len(samples_by_type.get(poem_type, []))
         print(f"  {poem_type} (tc+sc):       {count:>6}")
     print(f"  Kept poems (unique):        {stats['kept_poems']:>6}")
     print(f"  Kept samples (tc+sc):       {stats['kept_samples']:>6}")
-    print("=" * 55)
+    print("=" * 50)
 
     all_samples = []
     for poem_type in POEM_TYPE_MAP.values():
