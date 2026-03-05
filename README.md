@@ -6,7 +6,7 @@ LLM poetry generation system based on Qwen3-8B
 
 1. **Token-free Pruning**: Prune Qwen3-8B to only output single Chinese character tokens
 2. **Poetry Template Prompts**: Use mask templates to indicate character count requirements for each line
-3. **Multiple Poetry Formats**: Support for various formats like 五言绝句, 七言绝句, 五言律诗, 七言律诗
+3. **Constrained Decoding**: Balancing formal constraints and literary merit through our specially designed logit processor
 
 ## Dependencies
 
@@ -96,7 +96,7 @@ This launches a Gradio app in your browser. The UI supports:
 - Poetry type, metrical pattern, and rhyme group selection
 - Output in simplified or traditional Chinese
 
-### Supported Poetry Types
+#### Supported Poetry Types
 
 - 五言绝句
 - 五言律诗
@@ -105,25 +105,57 @@ This launches a Gradio app in your browser. The UI supports:
 
 ### 3. Prepare Fine-tuning Dataset
 
-Download the Complete Tang Poetry (全唐诗) and prepare the training data (filtered to regulated verse only):
+From the project root, run in order:
+
+**Step 1. Download raw 全唐诗 dataset from [chinese-poetry](https://github.com/chinese-poetry/chinese-poetry)**
 
 ```bash
-# Run from the project root (module mode) to avoid import path issues.
-# Auto-download and prepare dataset
-python -m data.prepare_dataset --download
-
-# Or use an existing local copy of the chinese-poetry repo
-python -m data.prepare_dataset --data_dir ./data/chinese-poetry
-
-# Customize output directory and eval split ratio
-python -m data.prepare_dataset --download --output_dir ./data/sft --eval_ratio 0.1
+python -m data.download_raw_dataset
+# Or: python -m data.download_raw_dataset --data_dir ./data/chinese-poetry
 ```
 
-This will:
-1. Download the [chinese-poetry](https://github.com/chinese-poetry/chinese-poetry) repository (sparse checkout, 全唐诗 only)
-2. Filter for regulated verse (格律诗): 五言绝句, 七言绝句, 五言律诗, 七言律诗
-3. Format each poem into the project's chat template (matching the inference prompt format)
-4. Output `train.jsonl` and `eval.jsonl` to the specified directory
+**Step 2. Filter poems and save intermediate list**
+
+```bash
+python -m data.filter_poems --output ./data/training/filtered_poems.json
+```
+
+**Step 3. Extract a short theme per poem using local Qwen3-8B model**
+
+```bash
+python -m data.extract_themes
+# Optional:
+#   --batch_size 32
+#   --limit 64          # Test on the first 64 poems
+```
+
+**Step 4. Formats with the chat template and build final train / eval JSONL**
+
+```bash
+python -m data.build_dataset
+# Optional: --output_dir ./data/training --eval_ratio 0.05 --seed 42
+```
+
+**Step 5. (Optional) Upload the dataset to Hugging Face Hub**
+
+Upload your constructed `train.jsonl` and `eval.jsonl` files to your Hugging Face dataset repo.
+First, make sure you are logged in (`huggingface-cli login`) or set the `HF_TOKEN` environment variable.
+
+```bash
+python -m data.upload_hf <your-hf-username>/<repo-name>
+# Options:
+#   --data_dir ./data/training    # Directory with train.jsonl and eval.jsonl (default)
+#   --dry_run                     # Just preview the dataset, don't push
+#   --private                     # Create repo as private
+```
+
+Example:
+
+```bash
+python -m data.upload_hf myusername/llmpoet-dataset --private
+```
+
+This will push the dataset to https://huggingface.co/datasets/myusername/llmpoet-dataset
 
 ### (Optional) EDA: Strict Regulated Verse Rate
 
@@ -164,29 +196,31 @@ The merged model can then be used with `generate.py` by passing `--model_path ./
 ```
 LLMPoet/
 ├── models/
-│   └── Qwen3-8B/              # Downloaded Qwen3-8B model
+│   └── Qwen3-8B/                # Downloaded Qwen3-8B model
 ├── data/
-│   ├── __init__.py            # Make data a Python package
-│   ├── utils.py               # Download/load chinese-poetry helpers
-│   ├── prepare_dataset.py     # Dataset preparation for fine-tuning
-│   ├── eda.py                 # Dataset EDA / statistics
-│   ├── chinese-poetry/        # Downloaded chinese-poetry repo
-│   └── training/              # Prepared JSONL training data
-│       ├── train.jsonl
-│       └── eval.jsonl
-├── configs/                   # Fine-tuning configs
-│   ├── finetune.yaml          #   Single config (params for different hardware)
-│   ├── ds_zero2.yaml          #   DeepSpeed ZeRO-2 (multi-GPU)
-│   └── ds_zero3.yaml          #   DeepSpeed ZeRO-3 (multi-GPU)
-├── output/                    # Training outputs (checkpoints, adapters)
-├── token_free_model.py        # Token-free model wrapper class
-├── utils.py                   # Utility functions (templates, formatting, etc.)
-├── app.py                     # Gradio web UI
-├── generate.py                # Generation script
-├── batch_generate.py          # Batch generation script
-├── finetune.py                # LoRA / QLoRA fine-tuning script
-├── merge_adapter.py           # Merge LoRA adapter into base model
-├── prune_tokenizer.py         # Identify single character tokens
-├── requirements.txt           # Python dependencies
+│   ├── __init__.py              # Make data a Python package
+│   ├── utils.py                 # Download / load chinese-poetry helpers
+│   ├── download_raw_dataset.py  # Download 全唐诗 only
+│   ├── filter_poems.py          # Filter to regulated verse
+│   ├── extract_themes.py        # Theme extraction via local Qwen3-8B
+│   ├── build_dataset.py         # Build train/eval JSONL from themes
+│   ├── upload_hf.py             # Upload dataset to Hugging Face Hub
+│   ├── eda.py                   # Dataset EDA / statistics
+│   ├── chinese-poetry/          # Downloaded chinese-poetry repo
+│   └── training/                # Prepared JSONL (filtered_poems, poem_themes, train / eval)
+├── configs/                     # Fine-tuning configs
+│   ├── finetune.yaml            #   Single config (params for different hardware)
+│   ├── ds_zero2.yaml            #   DeepSpeed ZeRO-2 (multi-GPU)
+│   └── ds_zero3.yaml            #   DeepSpeed ZeRO-3 (multi-GPU)
+├── output/                      # Training outputs (checkpoints, adapters)
+├── token_free_model.py          # Token-free model wrapper class
+├── utils.py                     # Utility functions (templates, formatting, etc.)
+├── app.py                       # Gradio web UI
+├── generate.py                  # Generation script
+├── batch_generate.py            # Batch generation script
+├── finetune.py                  # LoRA / QLoRA fine-tuning script
+├── merge_adapter.py             # Merge LoRA adapter into base model
+├── prune_tokenizer.py           # Identify single character tokens
+├── requirements.txt             # Python dependencies
 └── README.md
 ```

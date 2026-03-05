@@ -127,7 +127,7 @@ def main():
     )
     args = parser.parse_args()
 
-    # Locate or download data (reuse logic from prepare_dataset.py)
+    # Locate or download data (download_chinese_poetry from data.utils)
     if args.download:
         tang_dir = download_chinese_poetry(args.data_dir)
     else:
