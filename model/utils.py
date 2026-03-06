@@ -1,8 +1,14 @@
+"""
+Poetry-related utilities for the model package.
+
+- Script / display: poem type names in simplified vs traditional Chinese (POEM_TYPE_TC, get_poem_type_display).
+- Templates: masked poem skeletons (masked_poem_dict) and prompt templates (PROMPT_TEMPLATES, get_prompt_template).
+- Metrical data: ping-tone rhyme groups (PING_RHYME_GROUP_NAMES), metrical patterns for regulated verse (metrical_patterns).
+- Constraint logic: position constraints and 孤平/三平尾/三仄尾 handling (get_position_constraints, refine_constraint, etc.).
+"""
 import random
 
-# ---------------------------------------------------------------------------
 # Script variants: simplified (sc) / traditional (tc) Chinese
-# ---------------------------------------------------------------------------
 
 POEM_TYPE_TC = {
     "五言绝句": "五言絕句",
@@ -41,7 +47,7 @@ poetry_prompt_template_sc = '''<|im_start|>user
 请按照以下模板填写，每个<|extra_1|>位置填入一个汉字：
 {masked_poem}<|im_end|>
 <|im_start|>assistant
-现在为您创作一首主题为“{user_prompt}”的{poem_type}：
+现在为您创作一首主题为"{user_prompt}"的{poem_type}：
 '''
 
 poetry_prompt_template_tc = '''<|im_start|>user

@@ -36,12 +36,12 @@ pip install datasets peft bitsandbytes trl wandb
 pip install deepspeed
 ```
 
-And then, you need to download the [Qwen3-8B](https://huggingface.co/Qwen/Qwen3-8B) model to the local directory `LLMPoet/models/Qwen3-8B/`.
+And then, you need to download the [Qwen3-8B](https://huggingface.co/Qwen/Qwen3-8B) model to the local directory `LLMPoet/ckpt/Qwen3-8B/`.
 
 ```bash
 cd LLMPoet
-mkdir -p models
-cd models
+mkdir -p ckpt
+cd ckpt
 git lfs clone https://huggingface.co/Qwen/Qwen3-8B
 ```
 
@@ -54,30 +54,30 @@ git lfs clone https://huggingface.co/Qwen/Qwen3-8B
 After downloading the model, run the script to identify single character tokens in Qwen3-8B tokenizer:
 
 ```bash
-python prune_tokenizer.py
+python -m model.prune_tokenizer
 ```
 
 Or specify a custom model path:
 
 ```bash
-python prune_tokenizer.py --model_path ./models/Qwen3-8B
+python -m model.prune_tokenizer --model_path ./ckpt/Qwen3-8B --output_path ./ckpt/single_char_tokens.json
 ```
 
-This will generate `single_char_tokens.json` and `token_free_config.json` files in the project root.
+This will generate `single_char_tokens.json` in `./ckpt/`.
 
 ### 2. Generate Poetry
 
 #### Command Line
 
-Use the generation script to generate poetry:
+Use the CLI to generate poetry:
 
 ```bash
-python generate.py --user_prompt "春天" --poem_type "五言绝句"
+python cli.py --user_prompt "春天" --poem_type "五言绝句"
 ```
 
 Parameters:
-- `--model_path`: Local model path (default: ./models/Qwen3-8B)
-- `--config_path`: Token-free config file path (default: ./token_free_config.json)
+- `--model_path`: Local model path (default: ./ckpt/Qwen3-8B)
+- `--config_path`: Token-free config file path (default: ./ckpt/single_char_tokens.json)
 - `--user_prompt`: User prompt
 - `--poem_type`: Poetry type (五言绝句, 七言律诗, etc.)
 - `--device`: Device (cuda/cpu)
@@ -92,7 +92,7 @@ python app.py
 
 This launches a Gradio app in your browser. The UI supports:
 
-- Theme/topic input
+- Theme input
 - Poetry type, metrical pattern, and rhyme group selection
 - Output in simplified or traditional Chinese
 
@@ -176,7 +176,7 @@ python finetune.py --config configs/finetune.yaml
 
 Multi-GPU: `torchrun --nproc_per_node=4 finetune.py --config configs/finetune.yaml` (set `deepspeed` to `"./configs/ds_zero2.yaml"` in the config first).
 
-Resume from checkpoint: `python finetune.py --config configs/finetune.yaml --resume_from_checkpoint output/finetune/checkpoint-1000`
+Resume from checkpoint: `python finetune.py --config configs/finetune.yaml --resume_from_checkpoint ckpt/lora/checkpoint-1000`
 
 ### 5. Merge LoRA Adapter
 
@@ -184,21 +184,29 @@ After training, merge the adapter weights into the base model to produce a stand
 
 ```bash
 python merge_adapter.py \
-    --base_model ./models/Qwen3-8B \
-    --adapter_path ./output/finetune \
-    --output_path ./models/Qwen3-8B-Poetry
+    --base_model ./ckpt/Qwen3-8B \
+    --adapter_path ./ckpt/lora/checkpoint-1000 \
+    --output_path ./ckpt/Qwen3-8B-Poetry
 ```
 
-The merged model can then be used with `generate.py` by passing `--model_path ./models/Qwen3-8B-Poetry`.
+The merged model can then be used with `python cli.py` by passing `--model_path ./ckpt/Qwen3-8B-Poetry`.
 
 ## Code Structure
 
 ```
 LLMPoet/
-├── models/
-│   └── Qwen3-8B/                # Downloaded Qwen3-8B model
+├── ckpt/                        # Checkpoints and config (gitignored)
+│   ├── Qwen3-8B/                # Downloaded Qwen3-8B model
+│   ├── single_char_tokens.json  # Single-char token config (from model.prune_tokenizer)
+│   └── lora/                    # LoRA fine-tuning checkpoints (from finetune.py)
+├── model/                       # Model and generation logic
+│   ├── __init__.py
+│   ├── token_free_model.py      # Token-free Qwen3 wrapper
+│   ├── utils.py                 # Poetry templates, metrical patterns, etc.
+│   ├── generation.py            # load_token_free_model, generate_poem (core logic)
+│   └── prune_tokenizer.py       # Build single_char_tokens.json
 ├── data/
-│   ├── __init__.py              # Make data a Python package
+│   ├── __init__.py
 │   ├── utils.py                 # Download / load chinese-poetry helpers
 │   ├── download_raw_dataset.py  # Download 全唐诗 only
 │   ├── filter_poems.py          # Filter to regulated verse
@@ -212,15 +220,10 @@ LLMPoet/
 │   ├── finetune.yaml            #   Single config (params for different hardware)
 │   ├── ds_zero2.yaml            #   DeepSpeed ZeRO-2 (multi-GPU)
 │   └── ds_zero3.yaml            #   DeepSpeed ZeRO-3 (multi-GPU)
-├── output/                      # Training outputs (checkpoints, adapters)
-├── token_free_model.py          # Token-free model wrapper class
-├── utils.py                     # Utility functions (templates, formatting, etc.)
-├── app.py                       # Gradio web UI
-├── generate.py                  # Generation script
-├── batch_generate.py            # Batch generation script
+├── cli.py                       # CLI entry of poetry generation
+├── app.py                       # Gradio web UI entry of poetry generation
 ├── finetune.py                  # LoRA / QLoRA fine-tuning script
 ├── merge_adapter.py             # Merge LoRA adapter into base model
-├── prune_tokenizer.py           # Identify single character tokens
 ├── requirements.txt             # Python dependencies
 └── README.md
 ```

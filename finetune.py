@@ -14,7 +14,7 @@ Usage:
 
   # Resume from checkpoint
   python finetune.py --config configs/finetune.yaml \
-      --resume_from_checkpoint output/finetune/checkpoint-1000
+      --resume_from_checkpoint ckpt/lora/checkpoint-1000
 """
 
 import json

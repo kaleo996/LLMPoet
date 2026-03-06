@@ -15,7 +15,7 @@ from collections import Counter
 
 import opencc
 
-from utils import (
+from model.utils import (
     masked_poem_dict,
     poetry_prompt_template_sc,
     poetry_prompt_template_tc,

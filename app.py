@@ -9,12 +9,12 @@ import re
 import torch
 import gradio as gr
 
-from generate import load_token_free_model, generate_poem
-from utils import masked_poem_dict, metrical_patterns, PING_RHYME_GROUP_NAMES
+from model.generation import load_token_free_model, generate_poem
+from model.utils import masked_poem_dict, metrical_patterns, PING_RHYME_GROUP_NAMES
 
 # Paths
 CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
-CONFIG_PATH = os.path.join(CURRENT_DIR, "single_char_tokens.json")
+CONFIG_PATH = os.path.join(CURRENT_DIR, "ckpt", "single_char_tokens.json")
 
 # UI strings: en, zh-CN, zh-TW
 UI_STRINGS = {

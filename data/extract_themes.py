@@ -1,7 +1,7 @@
 """
 Extract poem themes using local Qwen3-8B.
 
-Reads filtered_poems.json, runs inference with models/Qwen3-8B for each poem
+Reads filtered_poems.json, runs inference with ckpt/Qwen3-8B for each poem
 to get a short theme in traditional Chinese. Saves poem_themes.json (id -> theme)
 for build_dataset.py. Supports --limit for testing and resume from existing theme cache.
 """
@@ -144,8 +144,8 @@ def main():
         help="Max number of poems to process (0 = all). Use for testing.",
     )
     parser.add_argument(
-        "--model_path", type=str, default="./models/Qwen3-8B",
-        help="Local Qwen3-8B model path (default: ./models/Qwen3-8B)",
+        "--model_path", type=str, default="./ckpt/Qwen3-8B",
+        help="Local Qwen3-8B model path (default: ./ckpt/Qwen3-8B)",
     )
     parser.add_argument(
         "--device", type=str, default="cuda", choices=("cuda", "cpu"),

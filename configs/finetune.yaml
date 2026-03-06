@@ -1,9 +1,9 @@
 # LLMPoet Fine-tuning Config (single file; adjust parameters per compute)
 
-model_path: "./models/Qwen3-8B"
+model_path: "./ckpt/Qwen3-8B"
 train_data: "./data/training/train.jsonl"
 eval_data: "./data/training/eval.jsonl"
-output_dir: "./output/finetune"
+output_dir: "./ckpt/lora"
 
 # Quantization: "4bit" | "8bit" | "none"
 quantization: "4bit"

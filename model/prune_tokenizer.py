@@ -10,6 +10,9 @@ from pingshui_rhyme import PingZeClassifier
 from collections import defaultdict
 from transformers import AutoTokenizer
 
+# Project root (parent of model/)
+_PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
 
 def is_chinese_char(char):
     """Check if character is a Chinese character"""
@@ -19,11 +22,11 @@ def is_chinese_char(char):
 def find_single_char_tokens(tokenizer, vocab_size=None):
     """
     Iterate through vocabulary to find all single character tokens (containing only one Chinese character)
-    
+
     Args:
         tokenizer: Qwen3 tokenizer
         vocab_size: Vocabulary size, if None use tokenizer.vocab_size
-    
+
     Returns:
         single_char_token_ids: List of single character token IDs
         single_char_tokens: List of single character token texts
@@ -131,33 +134,29 @@ def main():
     import argparse
 
     parser = argparse.ArgumentParser(description="Identify single character tokens in Qwen3-8B tokenizer")
-    parser.add_argument("--model_path", type=str, default=None, help="Local model path (default: ./models/Qwen3-8B)")
+    parser.add_argument("--model_path", type=str, default=None, help="Local model path (default: ./ckpt/Qwen3-8B)")
+    parser.add_argument("--output_path", type=str, default=None, help="Output JSON path (default: ./ckpt/single_char_tokens.json)")
     args = parser.parse_args()
 
-    # Set default model path
     if args.model_path is None:
-        project_root = os.path.dirname(os.path.abspath(__file__))
-        args.model_path = os.path.join(project_root, "models", "Qwen3-8B")
+        args.model_path = os.path.join(_PROJECT_ROOT, "ckpt", "Qwen3-8B")
+    if args.output_path is None:
+        args.output_path = os.path.join(_PROJECT_ROOT, "ckpt", "single_char_tokens.json")
 
     if not os.path.exists(args.model_path):
-        raise FileNotFoundError(f"Model not found at {args.model_path}. "
-                                f"Please download Qwen3-8B to this directory first. "
-                                f"See README.md for download instructions.")
+        raise FileNotFoundError(
+            f"Model not found at {args.model_path}. "
+            "Please download Qwen3-8B to this directory first. "
+            "See README.md for download instructions."
+        )
 
     print(f"Loading tokenizer from: {args.model_path}")
     tokenizer = AutoTokenizer.from_pretrained(args.model_path, trust_remote_code=True)
 
     print(f"Vocabulary size: {tokenizer.vocab_size}")
 
-    # Find all single character tokens
     single_char_token_ids, single_char_tokens = find_single_char_tokens(tokenizer)
-
-    # Annotate with Pingshui rhyme info
     tone_index, rhyme_index = annotate_pingshui(single_char_tokens, single_char_token_ids)
-
-    # Save results
-    output_dir = os.path.dirname(os.path.abspath(__file__))
-    output_file = os.path.join(output_dir, "single_char_tokens.json")
 
     result = {
         "model_path": args.model_path,
@@ -169,10 +168,11 @@ def main():
         "rhyme_index": rhyme_index,
     }
 
-    with open(output_file, "w", encoding="utf-8") as f:
+    os.makedirs(os.path.dirname(args.output_path), exist_ok=True)
+    with open(args.output_path, "w", encoding="utf-8") as f:
         json.dump(result, f, ensure_ascii=False, indent=2)
 
-    print(f"\nResults saved to: {output_file}")
+    print(f"\nResults saved to: {args.output_path}")
     print(f"Single character token count: {len(single_char_token_ids)}")
     print(f"Example tokens (first 8): {single_char_tokens[:8]}")
 

@@ -1,15 +1,8 @@
-# Model files (too large for git)
-models/*/
-
-# Generated config files
-token_free_config.json
-single_char_tokens.json
+# Checkpoints and generated config (too large for git)
+ckpt/
 
 # Data directories (downloaded dataset + prepared training data)
 data/*/
-
-# Fine-tuning outputs (checkpoints, adapters, merged models)
-output/
 
 # Python
 __pycache__/

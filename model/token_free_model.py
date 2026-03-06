@@ -7,7 +7,7 @@ import torch
 import torch.nn.functional as F
 from transformers import Qwen3ForCausalLM
 from typing import Optional, List, Tuple, Dict, Any
-from utils import refine_constraint, PING_RHYME_GROUP_NAMES
+from .utils import refine_constraint, PING_RHYME_GROUP_NAMES
 
 
 class TokenFreeQwen3ForCausalLM(Qwen3ForCausalLM):
