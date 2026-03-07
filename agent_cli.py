@@ -2,6 +2,7 @@ import argparse
 import json
 
 from agent.api import generate_poem_with_agent
+from agent.loop import set_verbose
 from model.utils import masked_poem_dict
 
 
@@ -68,7 +69,15 @@ def main():
         action="store_true",
         help="Print full JSON result",
     )
+    parser.add_argument(
+        "--verbose",
+        action="store_true",
+        help="Print detailed agent workflow",
+    )
     args = parser.parse_args()
+
+    if args.verbose:
+        set_verbose(True)
 
     result = generate_poem_with_agent(
         user_prompt=args.user_prompt,

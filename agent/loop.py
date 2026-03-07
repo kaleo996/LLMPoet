@@ -14,6 +14,12 @@ from .prompts import (
 )
 from .schemas import AgentResult, DraftAttempt, PlanSpec, RewriteSpec
 
+VERBOSE = False
+
+def set_verbose(enabled: bool):
+    global VERBOSE
+    VERBOSE = enabled
+
 
 def _extract_json_object(text: str) -> dict[str, Any]:
     text = text.strip()
@@ -184,7 +190,8 @@ def run_agent_loop(
     rewrite_spec = _parse_rewrite_spec(
         rewrite_text, user_prompt, poem_type, script, variant, rhyme_group
     )
-    print(f">>> [Rewrite] Style: {rewrite_spec.style} | Focus: {rewrite_spec.focus}")
+    if VERBOSE:
+        print(f">>> [Rewrite] Style: {rewrite_spec.style} | Focus: {rewrite_spec.focus}")
 
     plan_text = generate_text(
         model,
@@ -196,14 +203,16 @@ def run_agent_loop(
         top_p=0.9,
     )
     plan_spec = _parse_plan_spec(plan_text, poem_type, user_prompt)
-    print(f">>> [Plan] Imagery: {', '.join(plan_spec.imagery)} | Arc: {plan_spec.emotional_arc}")
+    if VERBOSE:
+        print(f">>> [Plan] Imagery: {', '.join(plan_spec.imagery)} | Arc: {plan_spec.emotional_arc}")
 
     attempts: list[DraftAttempt] = []
     best_attempt: DraftAttempt | None = None
     repair_hint = ""
 
     for round_index in range(max_rounds):
-        print(f"\n>>> [Round {round_index + 1}]")
+        if VERBOSE:
+            print(f"\n>>> [Round {round_index + 1}]")
         round_best_failed: DraftAttempt | None = None
         passed_attempts: list[DraftAttempt] = []
 
@@ -234,7 +243,8 @@ def run_agent_loop(
                 evaluation_report=report,
                 repair_hint_used=repair_hint,
             )
-            print(f"  - Candidate {candidate_index + 1}: {poem_text} | Score: {report.quality_score} | {'PASS' if report.passed else 'FAIL'}")
+            if VERBOSE:
+                print(f"  - Candidate {candidate_index + 1}: {poem_text} | Score: {report.quality_score} | {'PASS' if report.passed else 'FAIL'}")
             attempts.append(attempt)
 
             if report.passed:
@@ -264,7 +274,7 @@ def run_agent_loop(
             if round_best_failed is not None
             else ["unknown_generation_failure"]
         )
-        if not passed_attempts:
+        if not passed_attempts and VERBOSE:
             print(f"  - Failure reasons: {'; '.join(failure_reasons)}")
         repair_hint = build_repair_hint(failure_reasons, variant, rhyme_group)
         if any(reason.startswith("theme_") for reason in failure_reasons):
