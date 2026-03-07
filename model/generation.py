@@ -152,8 +152,6 @@ def generate_poem(
     masked_poem = masked_poem_dict[poem_type]
     segments, total_chars_needed = parse_template(masked_poem)
     position_constraints, variant_name = get_position_constraints(poem_type, variant_name=variant)
-    if position_constraints is not None:
-        print(f"Applying metrical pattern: {variant_name}")
 
     prompt_template = get_prompt_template(script)
     display_type = get_poem_type_display(poem_type, script)
@@ -173,9 +171,6 @@ def generate_poem(
         )
         .to(device)
     )
-
-    if rhyme_group is not None:
-        print(f"Using specified rhyme group: {rhyme_group}")
 
     with torch.no_grad():
         output_ids = model.generate_poem_guided(

@@ -1,0 +1,2 @@
+# One idiom per line, up to 100 lines
+兴高采烈

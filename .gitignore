@@ -4,6 +4,9 @@ ckpt/
 # Data directories (downloaded dataset + prepared training data)
 data/*/
 
+# Evaluation results
+eval/*.json
+
 # Python
 __pycache__/
 *.py[cod]

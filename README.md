@@ -162,7 +162,6 @@ This will push the dataset to https://huggingface.co/datasets/myusername/llmpoet
 Use `PoemStructureChecker` to estimate how many poems in 全唐诗 strictly satisfy rhyme + ping-ze meter rules:
 
 ```bash
-# Run from the project root (module mode).
 python -m data.eda
 ```
 
@@ -191,6 +190,37 @@ python merge_adapter.py \
 
 The merged model can then be used with `python cli.py` by passing `--model_path ./ckpt/Qwen3-8B-Poetry`.
 
+### 5. Evaluation
+
+Poetry generation evaluation in [CharPoet](https://arxiv.org/abs/2401.03512) style.
+
+**Theme files** (one item per line):
+- `eval/eval_idioms.txt`: 100 idioms (keyword setting).
+- `eval/eval_instructions.txt`: 100 natural-language instructions.
+
+**Step 1. Generate poems**
+
+```bash
+python eval/generate_for_eval.py
+```
+Output: `eval/eval_poems.json`.
+
+**Step 2. Formal restriction stats**
+
+```bash
+python eval/formal_stats.py
+```
+Reads `eval/eval_poems.json`, prints format accuracy and Pingshui 格律 (rhyming_ok, meter_ok, both_ok).
+
+**Step 3. Content quality scores**
+
+In this step, we call Moonshot API to score generated poems to avoid human bias. Set `MOONSHOT_API_KEY` (get from [Moonshot AI](https://platform.moonshot.ai)).
+```bash
+set MOONSHOT_API_KEY=your_key
+python eval/content_scores.py
+```
+Output: `eval/content_scores.json` and per-dimension means (Fluency, Meaning, Coherence, Relevance, Aesthetics, 1–5). Options: `--resume`, `--limit N`, `--delay 0.5`.
+
 ## Code Structure
 
 ```
@@ -216,6 +246,12 @@ LLMPoet/
 │   ├── eda.py                   # Dataset EDA / statistics
 │   ├── chinese-poetry/          # Downloaded chinese-poetry repo
 │   └── training/                # Prepared JSONL (filtered_poems, poem_themes, train / eval)
+├── eval/                        # CharPoet-style evaluation
+│   ├── eval_idioms.txt          # Evaluation themes: idioms
+│   ├── eval_instructions.txt    # Evaluation themes: instructions
+│   ├── generate_for_eval.py     # Batch generate, output eval_poems.json
+│   ├── formal_stats.py          # Formal restriction stats
+│   └── content_scores.py        # 5-dim scoring, output content_scores.json
 ├── configs/                     # Fine-tuning configs
 │   ├── finetune.yaml            #   Single config (params for different hardware)
 │   ├── ds_zero2.yaml            #   DeepSpeed ZeRO-2 (multi-GPU)
