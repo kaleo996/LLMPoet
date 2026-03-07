@@ -263,3 +263,14 @@ LLMPoet/
 ├── requirements.txt             # Python dependencies
 └── README.md
 ```
+
+### Run Agent
+
+```bash
+python agent_cli.py \
+  --model_path /workspace/lp/ckpt/Qwen3-8B \
+  --user_prompt "春天" \
+  --poem_type "五言绝句" \
+  --verbose \
+  --device cuda
+```
