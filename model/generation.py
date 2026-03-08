@@ -1,16 +1,17 @@
 """
-Core poetry generation logic: load token-free model, parse template, generate_poem.
+Core poetry generation logic: load token-free model, generate_poem with structure from poem_type.
 Used by both CLI (cli.py) and Web UI (app.py).
 """
 import json
 import os
-import re
 import torch
 from transformers import AutoTokenizer
 
 from .token_free_model import TokenFreeQwen3ForCausalLM
 from .utils import (
-    masked_poem_dict,
+    POEM_STRUCTURE,
+    get_poem_structure,
+    get_segments,
     get_prompt_template,
     get_poem_type_display,
     get_position_constraints,
@@ -85,32 +86,6 @@ def load_token_free_model(model_path=None, config_path=None, device="cuda"):
     return model, tokenizer
 
 
-def parse_template(masked_poem):
-    """
-    Parse template to extract character counts and punctuation positions.
-
-    Args:
-        masked_poem: Template string with <|extra_1|> markers
-
-    Returns:
-        segments: List of (char_count, punctuation) tuples
-        total_chars: Total number of characters needed
-    """
-    segments = []
-    placeholder = "<|extra_1|>"
-    pattern = r"(<\|extra_1\|>)+([，。、；]?)"
-
-    matches = re.finditer(pattern, masked_poem)
-    for match in matches:
-        punct = match.group(2) or ""
-        placeholder_len = len(match.group(0)) - len(punct)
-        char_count = placeholder_len // len(placeholder)
-        segments.append((char_count, punct))
-
-    total_chars = sum(seg[0] for seg in segments)
-    return segments, total_chars
-
-
 def generate_poem(
     model,
     tokenizer,
@@ -144,21 +119,23 @@ def generate_poem(
     Returns:
         generated_poem: Generated poetry text
     """
-    if poem_type not in masked_poem_dict:
+    if poem_type not in POEM_STRUCTURE:
         raise ValueError(
-            f"Unsupported poetry type: {poem_type}. Supported types: {list(masked_poem_dict.keys())}"
+            f"Unsupported poetry type: {poem_type}. Supported types: {list(POEM_STRUCTURE.keys())}"
         )
 
-    masked_poem = masked_poem_dict[poem_type]
-    segments, total_chars_needed = parse_template(masked_poem)
+    segments = get_segments(poem_type)
+    total_chars_needed = sum(seg[0] for seg in segments)
     position_constraints, variant_name = get_position_constraints(poem_type, variant_name=variant)
 
+    num_lines, chars_per_line = get_poem_structure(poem_type)
     prompt_template = get_prompt_template(script)
     display_type = get_poem_type_display(poem_type, script)
     prompt = prompt_template.format_map({
         "user_prompt": user_prompt,
-        "masked_poem": masked_poem,
         "poem_type": display_type,
+        "num_lines": num_lines,
+        "chars_per_line": chars_per_line,
     })
 
     input_ids = (

@@ -16,10 +16,10 @@ from collections import Counter
 import opencc
 
 from model.utils import (
-    masked_poem_dict,
     poetry_prompt_template_sc,
     poetry_prompt_template_tc,
     get_poem_type_display,
+    get_poem_structure,
 )
 
 
@@ -45,14 +45,15 @@ def format_sample(poem_type: str, title: str, poem_text: str,
         poem_text: Poem body in the target script.
         script: "simplified" or "traditional".
     """
-    masked_poem = masked_poem_dict[poem_type]
+    num_lines, chars_per_line = get_poem_structure(poem_type)
     template = poetry_prompt_template_tc if script == "traditional" else poetry_prompt_template_sc
     display_type = get_poem_type_display(poem_type, script)
 
     return template.format_map({
         "user_prompt": title,
-        "masked_poem": masked_poem,
         "poem_type": display_type,
+        "num_lines": num_lines,
+        "chars_per_line": chars_per_line,
     }) + poem_text + "<|im_end|>\n"
 
 

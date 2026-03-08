@@ -2,7 +2,7 @@
 Poetry-related utilities for the model package.
 
 - Script / display: poem type names in simplified vs traditional Chinese (POEM_TYPE_TC, get_poem_type_display).
-- Templates: masked poem skeletons (masked_poem_dict) and prompt templates (PROMPT_TEMPLATES, get_prompt_template).
+- Templates: prompt templates (PROMPT_TEMPLATES, get_prompt_template) and structure (POEM_STRUCTURE, get_poem_structure, get_segments).
 - Metrical data: ping-tone rhyme groups (PING_RHYME_GROUP_NAMES), metrical patterns for regulated verse (metrical_patterns).
 - Constraint logic: position constraints and 孤平/三平尾/三仄尾 handling (get_position_constraints, refine_constraint, etc.).
 """
@@ -30,30 +30,44 @@ def get_poem_type_display(poem_type: str, script: str = "simplified") -> str:
     return poem_type
 
 
-# Poetry template dictionary, using mask markers to indicate positions to fill
-masked_poem_dict = {
-    "五言绝句":
-    "<|extra_1|><|extra_1|><|extra_1|><|extra_1|><|extra_1|>，<|extra_1|><|extra_1|><|extra_1|><|extra_1|><|extra_1|>。<|extra_1|><|extra_1|><|extra_1|><|extra_1|><|extra_1|>，<|extra_1|><|extra_1|><|extra_1|><|extra_1|><|extra_1|>。",
-    "五言律诗":
-    "<|extra_1|><|extra_1|><|extra_1|><|extra_1|><|extra_1|>，<|extra_1|><|extra_1|><|extra_1|><|extra_1|><|extra_1|>。<|extra_1|><|extra_1|><|extra_1|><|extra_1|><|extra_1|>，<|extra_1|><|extra_1|><|extra_1|><|extra_1|><|extra_1|>。<|extra_1|><|extra_1|><|extra_1|><|extra_1|><|extra_1|>，<|extra_1|><|extra_1|><|extra_1|><|extra_1|><|extra_1|>。<|extra_1|><|extra_1|><|extra_1|><|extra_1|><|extra_1|>，<|extra_1|><|extra_1|><|extra_1|><|extra_1|><|extra_1|>。",
-    "七言绝句":
-    "<|extra_1|><|extra_1|><|extra_1|><|extra_1|><|extra_1|><|extra_1|><|extra_1|>，<|extra_1|><|extra_1|><|extra_1|><|extra_1|><|extra_1|><|extra_1|><|extra_1|>。<|extra_1|><|extra_1|><|extra_1|><|extra_1|><|extra_1|><|extra_1|><|extra_1|>，<|extra_1|><|extra_1|><|extra_1|><|extra_1|><|extra_1|><|extra_1|><|extra_1|>。",
-    "七言律诗":
-    "<|extra_1|><|extra_1|><|extra_1|><|extra_1|><|extra_1|><|extra_1|><|extra_1|>，<|extra_1|><|extra_1|><|extra_1|><|extra_1|><|extra_1|><|extra_1|><|extra_1|>。<|extra_1|><|extra_1|><|extra_1|><|extra_1|><|extra_1|><|extra_1|><|extra_1|>，<|extra_1|><|extra_1|><|extra_1|><|extra_1|><|extra_1|><|extra_1|><|extra_1|>。<|extra_1|><|extra_1|><|extra_1|><|extra_1|><|extra_1|><|extra_1|><|extra_1|>，<|extra_1|><|extra_1|><|extra_1|><|extra_1|><|extra_1|><|extra_1|><|extra_1|>。<|extra_1|><|extra_1|><|extra_1|><|extra_1|><|extra_1|><|extra_1|><|extra_1|>，<|extra_1|><|extra_1|><|extra_1|><|extra_1|><|extra_1|><|extra_1|><|extra_1|>。",
+# (num_lines, chars_per_line) per poem type, for prompt text and structure
+POEM_STRUCTURE = {
+    "五言绝句": (4, 5),
+    "五言律诗": (8, 5),
+    "七言绝句": (4, 7),
+    "七言律诗": (8, 7),
 }
 
+
+def get_poem_structure(poem_type: str) -> tuple[int, int]:
+    """Return (num_lines, chars_per_line) for the given poem type."""
+    if poem_type not in POEM_STRUCTURE:
+        raise ValueError(
+            f"Unknown poem_type: {poem_type}. Supported: {list(POEM_STRUCTURE.keys())}"
+        )
+    return POEM_STRUCTURE[poem_type]
+
+
+def get_segments(poem_type: str) -> list[tuple[int, str]]:
+    """Return segment list (char_count, punctuation) for constrained decoding.
+
+    Each segment is one line: (chars_per_line, "，" for odd lines, "。" for even lines).
+    """
+    num_lines, chars_per_line = get_poem_structure(poem_type)
+    return [
+        (chars_per_line, "，" if i % 2 == 0 else "。")
+        for i in range(num_lines)
+    ]
+
+
 poetry_prompt_template_sc = '''<|im_start|>user
-请创作一首{poem_type}，主题：{user_prompt}。
-请按照以下模板填写，每个<|extra_1|>位置填入一个汉字：
-{masked_poem}<|im_end|>
+请创作一首{poem_type}，主题：{user_prompt}。一共 {num_lines} 句，每句 {chars_per_line} 字。<|im_end|>
 <|im_start|>assistant
-现在为您创作一首主题为"{user_prompt}"的{poem_type}：
+现在为您创作一首主题为“{user_prompt}”的{poem_type}：
 '''
 
 poetry_prompt_template_tc = '''<|im_start|>user
-請創作一首{poem_type}，主題：{user_prompt}。
-請按照以下模板填寫，每個<|extra_1|>位置填入一個漢字：
-{masked_poem}<|im_end|>
+請創作一首{poem_type}，主題：{user_prompt}。一共 {num_lines} 句，每句 {chars_per_line} 字。<|im_end|>
 <|im_start|>assistant
 現在為您創作一首主題為「{user_prompt}」的{poem_type}：
 '''

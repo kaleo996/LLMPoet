@@ -16,29 +16,16 @@ if str(_PROJECT_ROOT) not in sys.path:
 
 
 from eval.poem_structure_checker import PoemStructureChecker
-from model.utils import masked_poem_dict
-
-
-def parse_template(masked_poem: str):
-    """Return segments (char_count, punct) and expected line lengths (chars per line)."""
-    segments = []
-    placeholder = "<|extra_1|>"
-    pattern = r"(<\|extra_1\|>)+([，。、；]?)"
-    for match in re.finditer(pattern, masked_poem):
-        punct = match.group(2) or ""
-        placeholder_len = len(match.group(0)) - len(punct)
-        char_count = placeholder_len // len(placeholder)
-        segments.append((char_count, punct))
-    expected_lengths = [seg[0] for seg in segments]
-    return segments, expected_lengths
+from model.utils import get_poem_structure
 
 
 def get_expected_line_lengths(poem_type: str) -> list[int]:
     """Return list of expected character counts per line for the given poem type."""
-    if poem_type not in masked_poem_dict:
+    try:
+        num_lines, chars_per_line = get_poem_structure(poem_type)
+        return [chars_per_line] * num_lines
+    except ValueError:
         return []
-    _, lengths = parse_template(masked_poem_dict[poem_type])
-    return lengths
 
 
 def count_chars_per_line(poem_text: str) -> list[int]:

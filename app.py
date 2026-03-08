@@ -10,7 +10,7 @@ import torch
 import gradio as gr
 
 from model.generation import load_token_free_model, generate_poem
-from model.utils import masked_poem_dict, metrical_patterns, PING_RHYME_GROUP_NAMES
+from model.utils import POEM_STRUCTURE, metrical_patterns, PING_RHYME_GROUP_NAMES
 
 # Paths
 CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -98,7 +98,7 @@ def build_rhyme_group_choices(random_label: str, rhyme_groups: list):
 
 
 def get_poem_type_choices():
-    return list(masked_poem_dict.keys())
+    return list(POEM_STRUCTURE.keys())
 
 
 def format_poem_grid(poem_text: str) -> str:

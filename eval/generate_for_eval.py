@@ -16,7 +16,7 @@ if _PROJECT_ROOT not in sys.path:
     sys.path.insert(0, _PROJECT_ROOT)
 
 from model.generation import load_token_free_model, generate_poem
-from model.utils import masked_poem_dict
+from model.utils import POEM_STRUCTURE
 
 
 def load_theme_lines(path: str, max_lines: int = 100) -> list[str]:
@@ -78,7 +78,7 @@ def main():
         instructions = instructions[: args.limit]
 
     print(f"Loaded {len(idioms)} idioms, {len(instructions)} instructions.")
-    poem_types = list(masked_poem_dict.keys())
+    poem_types = list(POEM_STRUCTURE.keys())
     print(f"Poem types: {poem_types}")
 
     print("Loading model...")
