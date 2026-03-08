@@ -8,18 +8,19 @@ import json
 import os
 import re
 import sys
+import threading
 import time
 from collections import defaultdict
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from tqdm import tqdm
+
+from openai import OpenAI
+
 
 # Project root
 _PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if _PROJECT_ROOT not in sys.path:
     sys.path.insert(0, _PROJECT_ROOT)
-
-try:
-    from openai import OpenAI
-except ImportError:
-    raise ImportError("Please install openai: pip install openai")
 
 # Five criteria from CharPoet §5.4 (1-5 scale)
 CRITERIA = {
@@ -40,7 +41,9 @@ def get_client():
             "Get your key from https://platform.moonshot.ai"
         )
     base_url = os.environ.get("MOONSHOT_BASE_URL", "https://api.moonshot.ai/v1")
-    return OpenAI(api_key=api_key, base_url=base_url)
+    # Timeout so stuck API calls return
+    timeout = 60.0
+    return OpenAI(api_key=api_key, base_url=base_url, timeout=timeout)
 
 
 def build_scoring_prompt(poem_text: str, user_prompt: str, poem_type: str) -> str:
@@ -48,7 +51,7 @@ def build_scoring_prompt(poem_text: str, user_prompt: str, poem_type: str) -> st
     criteria_text = "\n".join(
         f"- {name} (1-5): {desc}" for name, desc in CRITERIA.items()
     )
-    return f"""你是一位古诗质量评估专家。请对下面这首古诗在五个维度上分别打 1-5 分（5 为最好）。
+    return f"""请针对下面这首古诗，根据其具体内容在五个维度上分别打 1-5 分（5 为最好）。请严格使用 1-5 全区间：若某维度有明显不足请打 1 至 3 分，不要全部给高分。
 
 用户主题/指令：{user_prompt}
 诗体：{poem_type}
@@ -59,15 +62,24 @@ def build_scoring_prompt(poem_text: str, user_prompt: str, poem_type: str) -> st
 评分维度：
 {criteria_text}
 
-请只输出一个 JSON 对象，不要其他文字。键为英文维度名，值为 1-5 的整数。例如：
+请先逐维度用一句话说明评分理由，最后单独一行只输出一个 JSON 对象。键为英文维度名，值为 1-5 的整数。例如最后一行：
 {{"Fluency": 4, "Meaning": 5, "Coherence": 4, "Relevance": 5, "Aesthetics": 4}}
 """
+
+
+def has_valid_scores(rec: dict) -> bool:
+    """Return True if record has valid 1-5 scores for all five criteria."""
+    for key in CRITERIA:
+        v = rec.get(key)
+        if v is None or not (1 <= v <= 5):
+            return False
+    return True
 
 
 def parse_scores(response_text: str) -> dict | None:
     """Extract five scores from model response. Returns dict or None on failure."""
     text = response_text.strip()
-    # Try to find a JSON object
+    # Try to find a JSON object (may be last line after reasoning)
     m = re.search(r"\{[^{}]*\}", text)
     if not m:
         return None
@@ -96,6 +108,67 @@ def load_poems(path: str) -> list[dict]:
     out.extend(data.get("idiom", []))
     out.extend(data.get("instruction", []))
     return out
+
+
+class RateLimiter:
+    """Allow at most rpm requests per minute; call wait() before each request start."""
+
+    def __init__(self, rpm: int):
+        self._interval = 60.0 / max(1, rpm)
+        self._lock = threading.Lock()
+        self._next_available = 0.0
+
+    def wait(self) -> None:
+        with self._lock:
+            now = time.monotonic()
+            if now < self._next_available:
+                time.sleep(self._next_available - now)
+                now = time.monotonic()
+            self._next_available = now + self._interval
+
+
+def _score_one(
+    client: OpenAI,
+    model: str,
+    temperature: float,
+    rate_limiter: RateLimiter | None,
+    idx: int,
+    rec: dict,
+) -> tuple[int, dict]:
+    """Call API for one poem; return (idx, row)."""
+    theme = rec.get("theme", "")
+    poem_type = rec.get("poem_type", "")
+    theme_type = rec.get("theme_type", "")
+    poem_text = rec.get("poem_text", "")
+    user_prompt = rec.get("user_prompt", theme)
+    if rate_limiter is not None:
+        rate_limiter.wait()
+    prompt = build_scoring_prompt(poem_text, user_prompt, poem_type)
+    try:
+        resp = client.chat.completions.create(
+            model=model,
+            messages=[{"role": "user", "content": prompt}],
+            temperature=temperature,
+        )
+        content = (resp.choices[0].message.content or "").strip()
+        scores = parse_scores(content)
+    except Exception as e:
+        print(f"Error: {theme_type} theme={theme!r} poem_type={poem_type}: {e}")
+        scores = None
+    if scores is None:
+        print(
+            f"Warning: could not parse scores (theme={theme!r}, poem_type={poem_type}, theme_type={theme_type})"
+        )
+        scores = {k: None for k in CRITERIA}
+    row = {
+        "theme": theme,
+        "theme_type": theme_type,
+        "poem_type": poem_type,
+        "user_prompt": user_prompt,
+        "poem_text": poem_text,
+        **scores,
+    }
+    return (idx, row)
 
 
 def main():
@@ -135,7 +208,25 @@ def main():
         "--delay",
         type=float,
         default=0.5,
-        help="Seconds to wait between API calls (rate limit).",
+        help="Seconds to wait between API calls when --workers=1 (ignored if workers>1).",
+    )
+    parser.add_argument(
+        "--workers",
+        type=int,
+        default=3,
+        help="Max concurrent API requests (match API concurrency limit, e.g. 3).",
+    )
+    parser.add_argument(
+        "--rpm",
+        type=int,
+        default=20,
+        help="Rate limit: max requests per minute (e.g. 20). Used when workers>1.",
+    )
+    parser.add_argument(
+        "--temperature",
+        type=float,
+        default=0.2,
+        help="Sampling temperature for API (0=deterministic; 0.2-0.5 may improve score variation).",
     )
     args = parser.parse_args()
 
@@ -163,49 +254,51 @@ def main():
             pass
 
     client = get_client()
-    results = []
-    for i, rec in enumerate(poems):
+    # Results by index so we can merge existing + API and keep poem order
+    results_by_idx: list[dict | None] = [None] * len(poems)
+    to_score: list[tuple[int, dict]] = []
+    for idx, rec in enumerate(poems):
         theme = rec.get("theme", "")
         poem_type = rec.get("poem_type", "")
         theme_type = rec.get("theme_type", "")
-        poem_text = rec.get("poem_text", "")
-        user_prompt = rec.get("user_prompt", theme)
-
         key = (theme, poem_type, theme_type)
-        if key in existing:
-            results.append(existing[key])
-            continue
+        if key in existing and has_valid_scores(existing[key]):
+            results_by_idx[idx] = existing[key]
+        else:
+            to_score.append((idx, rec))
 
-        prompt = build_scoring_prompt(poem_text, user_prompt, poem_type)
-        try:
-            resp = client.chat.completions.create(
-                model=args.model,
-                messages=[{"role": "user", "content": prompt}],
-                temperature=0.0,
+    if args.resume and to_score:
+        print(f"Resume: {len(poems) - len(to_score)} already have valid scores, {len(to_score)} to rescore.")
+
+    if args.workers <= 1:
+        # Sequential: original behavior with --delay
+        rate_limiter = None
+        for idx, rec in tqdm(to_score, desc="Scoring poems"):
+            _, row = _score_one(
+                client, args.model, args.temperature, rate_limiter, idx, rec
             )
-            content = (resp.choices[0].message.content or "").strip()
-            scores = parse_scores(content)
-        except Exception as e:
-            print(f"[error] {theme_type} theme={theme!r} poem_type={poem_type}: {e}")
-            scores = None
-
-        if scores is None:
-            scores = {k: None for k in CRITERIA}
-
-        row = {
-            "theme": theme,
-            "theme_type": theme_type,
-            "poem_type": poem_type,
-            "user_prompt": user_prompt,
-            "poem_text": poem_text,
-            **scores,
-        }
-        results.append(row)
-
-        if (i + 1) % 20 == 0 or i + 1 == len(poems):
-            print(f"[progress] Scored {i + 1}/{len(poems)}")
-
-        time.sleep(args.delay)
+            results_by_idx[idx] = row
+            time.sleep(args.delay)
+    else:
+        # Concurrent: respect --rpm (stagger request starts)
+        rate_limiter = RateLimiter(args.rpm)
+        with ThreadPoolExecutor(max_workers=args.workers) as executor:
+            futures = {
+                executor.submit(
+                    _score_one,
+                    client,
+                    args.model,
+                    args.temperature,
+                    rate_limiter,
+                    idx,
+                    rec,
+                ): idx
+                for idx, rec in to_score
+            }
+            for future in tqdm(as_completed(futures), total=len(futures), desc="Scoring poems"):
+                idx, row = future.result()
+                results_by_idx[idx] = row
+    results = list(results_by_idx)
 
     os.makedirs(os.path.dirname(args.output) or ".", exist_ok=True)
     with open(args.output, "w", encoding="utf-8") as f:
