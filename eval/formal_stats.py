@@ -1,6 +1,6 @@
 """
 Step 2 of CharPoet-style evaluation: read eval_poems.json, compute format
-accuracy and Pingshui rhyme/meter stats using PoemStructureChecker.
+accuracy and Pingshui rhyme/meter stats using local `PoemStructureChecker`.
 """
 import argparse
 import json
@@ -8,27 +8,15 @@ import os
 import re
 import sys
 from collections import Counter, defaultdict
+from pathlib import Path
 
-import opencc
-import time
-s2t_converter = opencc.OpenCC("s2t")
+_PROJECT_ROOT = Path(__file__).resolve().parents[1]
+if str(_PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(_PROJECT_ROOT))
 
-# #region agent log
-_LOG_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "debug-fda10f.log")
-def _debug_log(location, message, data, hypothesis=""):
-    import json as _json
-    entry = {"sessionId": "fda10f", "location": location, "message": message, "data": data, "hypothesisId": hypothesis, "timestamp": int(time.time() * 1000)}
-    with open(_LOG_PATH, "a", encoding="utf-8") as _f:
-        _f.write(_json.dumps(entry, ensure_ascii=False) + "\n")
-# #endregion
 
-# Project root
-_PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-if _PROJECT_ROOT not in sys.path:
-    sys.path.insert(0, _PROJECT_ROOT)
-
+from eval.poem_structure_checker import PoemStructureChecker
 from model.utils import masked_poem_dict
-from pingshui_rhyme import PoemStructureChecker
 
 
 def parse_template(masked_poem: str):
@@ -51,15 +39,6 @@ def get_expected_line_lengths(poem_type: str) -> list[int]:
         return []
     _, lengths = parse_template(masked_poem_dict[poem_type])
     return lengths
-
-
-def build_poem_text_for_checker(poem_text: str) -> str:
-    """Convert generated poem string to format expected by PoemStructureChecker.
-
-    Converts simplified Chinese to traditional Chinese because PoemStructureChecker's
-    rhyme/tone dictionary uses traditional characters exclusively.
-    """
-    return s2t_converter.convert(poem_text)
 
 
 def count_chars_per_line(poem_text: str) -> list[int]:
@@ -100,69 +79,31 @@ def run_stats(poem_list: list, checker: PoemStructureChecker) -> dict:
 
         stats["total"] += 1
 
-        fmt_ok = check_format_accuracy(poem_text, poem_type)
-        if fmt_ok:
+        if check_format_accuracy(poem_text, poem_type):
             stats["format_ok"] += 1
 
-        checker_text = build_poem_text_for_checker(poem_text)
-        if not checker_text.strip():
+        if not poem_text.strip():
             stats["skip_no_paragraphs"] += 1
-            # #region agent log
-            _debug_log("formal_stats.py:skip", "Skipped empty poem", {"poem_type": poem_type, "theme": rec.get("theme", "")}, hypothesis="C")
-            # #endregion
             continue
 
-        rhyming_reason = ""
         try:
-            rhyming_ok, rhyming_reason = checker.check_poem_rhyming(checker_text)
-        except Exception as e:
+            rhyming_ok, _ = checker.check_rhyming(poem_text)
+        except Exception:
             stats["error_rhyming"] += 1
             rhyming_ok = False
-            rhyming_reason = f"exception: {e}"
         if rhyming_ok:
             stats["rhyming_ok"] += 1
 
-        meter_reason = ""
         try:
-            meter_ok, meter_reason = checker.check_poem_pingze_meter(checker_text)
-        except Exception as e:
+            meter_ok, _ = checker.check_meter(poem_text)
+        except Exception:
             stats["error_meter"] += 1
             meter_ok = False
-            meter_reason = f"exception: {e}"
         if meter_ok:
             stats["meter_ok"] += 1
 
         if rhyming_ok and meter_ok:
             stats["both_ok"] += 1
-
-        # #region agent log
-        lines = checker.clean_poem(checker_text)
-        line_endings_info = []
-        for li, line in enumerate(lines):
-            if line:
-                last_char = line[-1]
-                tone = checker.classifier.classify(last_char)
-                rhyme_groups = checker.rhyme_checker.get_rhyme_group(last_char)
-                line_endings_info.append({
-                    "line_idx": li,
-                    "last_char": last_char,
-                    "tone": tone,
-                    "rhyme_groups": [(g[0], g[1], g[2]) for g in rhyme_groups] if rhyme_groups else None,
-                    "line_text": line,
-                })
-        _debug_log("formal_stats.py:check", "Poem check result", {
-            "poem_type": poem_type,
-            "theme": rec.get("theme", ""),
-            "poem_text_sc": poem_text,
-            "checker_text_tc": checker_text,
-            "format_ok": fmt_ok,
-            "rhyming_ok": rhyming_ok,
-            "rhyming_reason": rhyming_reason,
-            "meter_ok": meter_ok,
-            "meter_reason": meter_reason,
-            "line_endings": line_endings_info,
-        }, hypothesis="A,B,C,D,E")
-        # #endregion
 
     return dict(stats)
 
@@ -179,7 +120,7 @@ def main():
     )
     args = parser.parse_args()
 
-    if not os.path.isfile(args.input):
+    if not Path(args.input).is_file():
         print(f"Error: {args.input} not found. Run eval/generate_for_eval.py first.")
         sys.exit(1)
 
@@ -203,7 +144,7 @@ def main():
     instr_stats = run_stats(instruction_list, checker) if instruction_list else {}
 
     # By poem_type
-    by_type = defaultdict(list)
+    by_type: dict[str, list] = defaultdict(list)
     for rec in all_records:
         by_type[rec.get("poem_type", "")].append(rec)
     type_stats = {pt: run_stats(by_type[pt], checker) for pt in sorted(by_type) if by_type[pt]}
