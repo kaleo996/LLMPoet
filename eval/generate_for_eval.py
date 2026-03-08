@@ -15,7 +15,7 @@ _PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if _PROJECT_ROOT not in sys.path:
     sys.path.insert(0, _PROJECT_ROOT)
 
-from model.generation import load_token_free_model, generate_poem
+from model.generation import load_token_free_model, generate_poems_batch
 from model.utils import POEM_STRUCTURE
 
 
@@ -69,6 +69,12 @@ def main():
         default="cuda",
         help="Device (cuda/cpu).",
     )
+    parser.add_argument(
+        "--batch_size",
+        type=int,
+        default=8,
+        help="Batch size for parallel poem generation.",
+    )
     args = parser.parse_args()
 
     idioms = load_theme_lines(args.idioms)
@@ -92,28 +98,41 @@ def main():
             ("keyword", idioms, "idiom"),
             ("instruction", instructions, "instruction"),
         ]:
-            for theme in themes:
-                for poem_type in poem_types:
-                    try:
-                        poem_text = generate_poem(
-                            model=model,
-                            tokenizer=tokenizer,
-                            user_prompt=theme,
-                            poem_type=poem_type,
-                            device=args.device,
-                            script="simplified",
-                        )
-                    except Exception as e:
-                        tqdm.write(f"Error generating poem for {theme_type} theme={theme!r} poem_type={poem_type}: {e}")
-                        poem_text = ""
-                    results[key].append({
-                        "theme": theme,
-                        "theme_type": theme_type,
-                        "poem_type": poem_type,
-                        "user_prompt": theme,
-                        "poem_text": poem_text,
-                    })
-                    pbar.update(1)
+            for poem_type in poem_types:
+                for start in range(0, len(themes), args.batch_size):
+                    batch_themes = themes[start : start + args.batch_size]
+                    retry = 0
+                    while True:
+                        retry += 1
+                        try:
+                            batch_poems = generate_poems_batch(
+                                model=model,
+                                tokenizer=tokenizer,
+                                user_prompts=batch_themes,
+                                poem_type=poem_type,
+                                device=args.device,
+                                script="simplified",
+                            )
+                            if len(batch_poems) != len(batch_themes):
+                                raise RuntimeError(
+                                    f"Batch output size mismatch: {len(batch_poems)} vs {len(batch_themes)}"
+                                )
+                            break
+                        except Exception as e:
+                            tqdm.write(
+                                f"Batch generation failed for {theme_type} poem_type={poem_type} "
+                                f"start={start} size={len(batch_themes)} retry={retry}: {e}. Retrying..."
+                            )
+
+                    for theme, poem_text in zip(batch_themes, batch_poems):
+                        results[key].append({
+                            "theme": theme,
+                            "theme_type": theme_type,
+                            "poem_type": poem_type,
+                            "user_prompt": theme,
+                            "poem_text": poem_text,
+                        })
+                        pbar.update(1)
 
     os.makedirs(os.path.dirname(args.output) or ".", exist_ok=True)
     with open(args.output, "w", encoding="utf-8") as f:

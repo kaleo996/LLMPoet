@@ -359,3 +359,147 @@ class TokenFreeQwen3ForCausalLM(Qwen3ForCausalLM):
             past_key_values = outputs.past_key_values  # Update KV cache
 
         return generated_ids
+
+    @torch.no_grad()
+    def generate_poem_guided_batch(
+        self,
+        input_ids: torch.LongTensor,
+        attention_mask: Optional[torch.LongTensor],
+        tokenizer,
+        segments: List[Tuple[int, str]],
+        total_chars_needed: int,
+        top_k: int = 50,
+        top_p: float = 0.95,
+        temperature: float = 0.8,
+        position_constraints_batch: Optional[List[List[Dict]]] = None,
+        rhyme_groups: Optional[List[Optional[str]]] = None,
+    ) -> List[List[int]]:
+        """
+        Batch generate poems one character at a time following the same template.
+        Keeps per-sample rhyme states while sharing each forward pass.
+        """
+        device = input_ids.device
+        batch_size = input_ids.size(0)
+        generated_ids_batch: List[List[int]] = [[] for _ in range(batch_size)]
+        past_key_values = None
+        cur_input_ids = input_ids
+        cur_attention_mask = attention_mask
+        segment_idx = 0
+        char_in_segment = 0
+
+        if rhyme_groups is None:
+            current_rhyme_groups: List[Optional[str]] = [None] * batch_size
+        else:
+            if len(rhyme_groups) != batch_size:
+                raise ValueError("rhyme_groups length must equal batch size")
+            current_rhyme_groups = list(rhyme_groups)
+
+        for rg in current_rhyme_groups:
+            if rg is not None and rg not in PING_RHYME_GROUP_NAMES:
+                raise ValueError(
+                    f"Invalid rhyme group for regulated verse: {rg}. "
+                    f"Valid groups: {PING_RHYME_GROUP_NAMES}"
+                )
+
+        if position_constraints_batch is not None and len(position_constraints_batch) != batch_size:
+            raise ValueError("position_constraints_batch length must equal batch size")
+
+        global_char_idx = 0
+        generated_tones_batch: List[Dict[int, str]] = [{} for _ in range(batch_size)]
+        anti_rhyme_groups_batch: List[set] = [set() for _ in range(batch_size)]
+
+        for _ in range(total_chars_needed):
+            outputs = self.forward(
+                input_ids=cur_input_ids,
+                attention_mask=cur_attention_mask,
+                past_key_values=past_key_values,
+                use_cache=True,
+            )
+            logits = outputs.logits
+            cur_attention_mask = None
+
+            sampled_token_ids: List[int] = []
+            for i in range(batch_size):
+                constraint = None
+                position_mask = None
+                if (
+                    position_constraints_batch is not None
+                    and global_char_idx < len(position_constraints_batch[i])
+                ):
+                    constraint = position_constraints_batch[i][global_char_idx]
+                    constraint = refine_constraint(constraint, generated_tones_batch[i])
+                    position_mask = self._build_position_mask(
+                        constraint,
+                        current_rhyme_groups[i],
+                        anti_rhyme_groups_batch[i],
+                    )
+
+                token_id = self._sample_next_token(
+                    logits[i : i + 1],
+                    top_k=top_k,
+                    top_p=top_p,
+                    temperature=temperature,
+                    position_mask=position_mask,
+                )
+                sampled_token_ids.append(token_id)
+
+                if constraint is not None and constraint["tone"] in ("ping", "ze"):
+                    generated_tones_batch[i][global_char_idx] = constraint["tone"]
+                elif self.ping_mask is not None and self.ping_mask[token_id]:
+                    generated_tones_batch[i][global_char_idx] = "ping"
+                elif self.ze_mask is not None and self.ze_mask[token_id]:
+                    generated_tones_batch[i][global_char_idx] = "ze"
+
+                if (
+                    constraint is not None
+                    and constraint.get("is_anti_rhyme", False)
+                    and current_rhyme_groups[i] is None
+                    and self.token_to_ping_rhyme_groups is not None
+                ):
+                    groups = self.token_to_ping_rhyme_groups.get(token_id, [])
+                    anti_rhyme_groups_batch[i].update(groups)
+
+                if constraint is not None and constraint["is_rhyme"]:
+                    if current_rhyme_groups[i] is None:
+                        current_rhyme_groups[i] = self._get_ping_rhyme_group(token_id)
+
+                generated_ids_batch[i].append(token_id)
+
+            char_in_segment += 1
+            global_char_idx += 1
+
+            if char_in_segment == segments[segment_idx][0]:
+                punctuation = segments[segment_idx][1]
+                if punctuation:
+                    punct_id = tokenizer.encode(punctuation, add_special_tokens=False)[0]
+                    for i in range(batch_size):
+                        generated_ids_batch[i].append(punct_id)
+
+                    # Keep decoding order identical to single-sample path:
+                    # first push sampled character to cache, then set punctuation as next input.
+                    cur_input_ids = torch.tensor(
+                        sampled_token_ids, device=device, dtype=torch.long
+                    ).unsqueeze(1)
+                    outputs = self.forward(
+                        input_ids=cur_input_ids,
+                        past_key_values=outputs.past_key_values,
+                        use_cache=True,
+                    )
+                    cur_input_ids = torch.full(
+                        (batch_size, 1), punct_id, device=device, dtype=torch.long
+                    )
+                else:
+                    cur_input_ids = torch.tensor(
+                        sampled_token_ids, device=device, dtype=torch.long
+                    ).unsqueeze(1)
+
+                past_key_values = outputs.past_key_values
+                segment_idx += 1
+                char_in_segment = 0
+            else:
+                cur_input_ids = torch.tensor(
+                    sampled_token_ids, device=device, dtype=torch.long
+                ).unsqueeze(1)
+                past_key_values = outputs.past_key_values
+
+        return generated_ids_batch

@@ -164,3 +164,96 @@ def generate_poem(
     generated_poem = tokenizer.decode(output_ids, skip_special_tokens=False)
 
     return generated_poem
+
+
+def generate_poems_batch(
+    model,
+    tokenizer,
+    user_prompts,
+    poem_type,
+    device,
+    variants=None,
+    rhyme_groups=None,
+    script="simplified",
+    max_input_length=250,
+    top_k=50,
+    top_p=0.95,
+    temperature=0.8,
+):
+    """
+    Batch version of generate_poem for faster evaluation throughput.
+
+    Returns:
+        List[str]: Generated poems, same order as user_prompts
+    """
+    if poem_type not in POEM_STRUCTURE:
+        raise ValueError(
+            f"Unsupported poetry type: {poem_type}. Supported types: {list(POEM_STRUCTURE.keys())}"
+        )
+    if not user_prompts:
+        return []
+
+    batch_size = len(user_prompts)
+    if variants is None:
+        variants = [None] * batch_size
+    if rhyme_groups is None:
+        rhyme_groups = [None] * batch_size
+    if len(variants) != batch_size:
+        raise ValueError("variants length must match user_prompts length")
+    if len(rhyme_groups) != batch_size:
+        raise ValueError("rhyme_groups length must match user_prompts length")
+
+    segments = get_segments(poem_type)
+    total_chars_needed = sum(seg[0] for seg in segments)
+    num_lines, chars_per_line = get_poem_structure(poem_type)
+    prompt_template = get_prompt_template(script)
+    display_type = get_poem_type_display(poem_type, script)
+
+    prompts = []
+    position_constraints_batch = []
+    for user_prompt, variant in zip(user_prompts, variants):
+        position_constraints, _ = get_position_constraints(poem_type, variant_name=variant)
+        position_constraints_batch.append(position_constraints)
+        prompts.append(
+            prompt_template.format_map(
+                {
+                    "user_prompt": user_prompt,
+                    "poem_type": display_type,
+                    "num_lines": num_lines,
+                    "chars_per_line": chars_per_line,
+                }
+            )
+        )
+
+    model_inputs = tokenizer(
+        prompts,
+        return_tensors="pt",
+        truncation=True,
+        padding=True,
+        max_length=max_input_length,
+        add_special_tokens=False,
+    )
+    input_ids = model_inputs["input_ids"].to(device)
+    attention_mask = model_inputs.get("attention_mask")
+    if attention_mask is not None:
+        attention_mask = attention_mask.to(device)
+
+    with torch.no_grad():
+        output_ids_batch = model.generate_poem_guided_batch(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            tokenizer=tokenizer,
+            segments=segments,
+            total_chars_needed=total_chars_needed,
+            top_k=top_k,
+            top_p=top_p,
+            temperature=temperature,
+            position_constraints_batch=position_constraints_batch,
+            rhyme_groups=rhyme_groups,
+        )
+
+    generated_poems = [
+        tokenizer.decode(output_ids, skip_special_tokens=False)
+        for output_ids in output_ids_batch
+    ]
+    return generated_poems
