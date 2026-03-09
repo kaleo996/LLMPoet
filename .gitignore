@@ -1,0 +1,32 @@
+# Checkpoints and generated config (too large for git)
+ckpt/
+
+# Data directories (downloaded dataset + prepared training data)
+data/*/
+
+# Evaluation results
+eval/*.json
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+build/
+dist/
+*.egg-info/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
