@@ -7,7 +7,7 @@ from model.utils import masked_poem_dict
 
 
 def main():
-    parser = argparse.ArgumentParser(description="LLMPoet agent-based poetry generation")
+    parser = argparse.ArgumentParser(description="NekooBasho agent-based poetry generation")
     parser.add_argument(
         "--model_path",
         type=str,

@@ -1,4 +1,4 @@
-# LLMPoet
+# NekooBasho
 
 LLM poetry generation system based on Qwen3-8B
 
@@ -36,10 +36,10 @@ pip install datasets peft bitsandbytes trl wandb
 pip install deepspeed
 ```
 
-And then, you need to download the [Qwen3-8B](https://huggingface.co/Qwen/Qwen3-8B) model to the local directory `LLMPoet/ckpt/Qwen3-8B/`.
+And then, you need to download the [Qwen3-8B](https://huggingface.co/Qwen/Qwen3-8B) model to the local directory `NekooBasho/ckpt/Qwen3-8B/`.
 
 ```bash
-cd LLMPoet
+cd NekooBasho
 mkdir -p ckpt
 cd ckpt
 git lfs clone https://huggingface.co/Qwen/Qwen3-8B
@@ -152,10 +152,10 @@ python -m data.upload_hf <your-hf-username>/<repo-name>
 Example:
 
 ```bash
-python -m data.upload_hf myusername/llmpoet-dataset --private
+python -m data.upload_hf myusername/nekoobasho-dataset --private
 ```
 
-This will push the dataset to https://huggingface.co/datasets/myusername/llmpoet-dataset
+This will push the dataset to https://huggingface.co/datasets/myusername/nekoobasho-dataset
 
 ### (Optional) EDA: Strict Regulated Verse Rate
 
@@ -224,7 +224,7 @@ Output: `eval/content_scores.json` and per-dimension means (Fluency, Meaning, Co
 ## Code Structure
 
 ```
-LLMPoet/
+NekooBasho/
 ├── ckpt/                        # Checkpoints and config (gitignored)
 │   ├── Qwen3-8B/                # Downloaded Qwen3-8B model
 │   ├── single_char_tokens.json  # Single-char token config (from model.prune_tokenizer)

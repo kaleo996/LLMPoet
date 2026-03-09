@@ -1,5 +1,5 @@
 """
-LLMPoet Agent Gradio Web UI
+NekooBasho Agent Gradio Web UI
 Simple demo app for the agent-based poetry generation pipeline.
 """
 import json
@@ -114,12 +114,12 @@ def main():
     device = "cuda" if torch.cuda.is_available() else "cpu"
 
     with gr.Blocks(
-        title="LLMPoet Agent",
+        title="NekooBasho Agent",
         css="""
         .poem-container { display: flex; justify-content: center; }
         """,
     ) as demo:
-        gr.Markdown("# LLMPoet Agent Demo")
+        gr.Markdown("# NekooBasho Agent Demo")
 
         user_prompt = gr.Textbox(
             label="主题",

@@ -20,7 +20,7 @@ def main():
     )
     parser.add_argument(
         "repo_id", type=str, nargs="?", default=None,
-        help="Hugging Face repo id (e.g. username/llmpoet-dataset). Required unless --dry_run.",
+        help="Hugging Face repo id (e.g. username/nekoobasho-dataset). Required unless --dry_run.",
     )
     parser.add_argument(
         "--dry_run", action="store_true",
@@ -60,7 +60,7 @@ def main():
         return
 
     if not args.repo_id:
-        print("Error: repo_id required for upload. Example: username/llmpoet-dataset")
+        print("Error: repo_id required for upload. Example: username/nekoobasho-dataset")
         return
 
     print(f"\nPushing to Hugging Face Hub: {args.repo_id}")

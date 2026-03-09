@@ -4,7 +4,7 @@ from model.generation import load_token_free_model, generate_poem
 
 
 def main():
-    parser = argparse.ArgumentParser(description="LLMPoet poetry generation")
+    parser = argparse.ArgumentParser(description="NekooBasho poetry generation")
     parser.add_argument(
         "--model_path",
         type=str,

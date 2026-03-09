@@ -1,5 +1,5 @@
 """
-LLMPoet Gradio Web UI
+NekooBasho Gradio Web UI
 Generates Chinese poetry with configurable parameters and multi-language interface.
 """
 import json
@@ -19,7 +19,7 @@ CONFIG_PATH = os.path.join(CURRENT_DIR, "ckpt", "single_char_tokens.json")
 # UI strings: en, zh-CN, zh-TW
 UI_STRINGS = {
     "en": {
-        "title": "LLMPoet - Chinese Poetry Generator",
+        "title": "NekooBasho - Chinese Poetry Generator",
         "user_prompt": "Theme / Topic",
         "user_prompt_placeholder": "e.g., spring, mountains, friendship",
         "poem_type": "Poetry Type",
@@ -37,7 +37,7 @@ UI_STRINGS = {
         "traditional": "Traditional Chinese",
     },
     "zh-CN": {
-        "title": "LLMPoet - 中文诗歌生成",
+        "title": "NekooBasho - 中文诗歌生成",
         "user_prompt": "主题",
         "user_prompt_placeholder": "例如：春天、山水、友情",
         "poem_type": "诗体",
@@ -55,7 +55,7 @@ UI_STRINGS = {
         "traditional": "繁体中文",
     },
     "zh-TW": {
-        "title": "LLMPoet - 中文詩歌生成",
+        "title": "NekooBasho - 中文詩歌生成",
         "user_prompt": "主題",
         "user_prompt_placeholder": "例如：春天、山水、友情",
         "poem_type": "詩體",
@@ -213,12 +213,12 @@ def main():
     # Determine device
     device = "cuda" if torch.cuda.is_available() else "cpu"
 
-    with gr.Blocks(title="LLMPoet", css="""
+    with gr.Blocks(title="NekooBasho", css="""
         .poem-container { display: flex; justify-content: center; }
         .lang-row { justify-content: space-between; align-items: center; }
     """) as demo:
         with gr.Row(elem_classes="lang-row"):
-            title_md = gr.Markdown("# LLMPoet - Chinese Poetry Generator")
+            title_md = gr.Markdown("# NekooBasho - Chinese Poetry Generator")
             lang_dd = gr.Dropdown(
                 choices=["English", "简体中文", "繁體中文"],
                 value="English",

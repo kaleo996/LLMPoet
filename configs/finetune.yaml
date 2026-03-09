@@ -1,4 +1,4 @@
-# LLMPoet Fine-tuning Config (single file; adjust parameters per compute)
+# NekooBasho Fine-tuning Config (single file; adjust parameters per compute)
 
 model_path: "./ckpt/Qwen3-8B"
 train_data: "./data/training/train.jsonl"

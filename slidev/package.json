@@ -7,7 +7,7 @@
     "dev": "slidev --open",
     "export": "slidev export",
     "deploy:gh": "slidev build && npx gh-pages -d dist -b gh-deploy",
-    "deploy:gh-pages": "slidev build --base /LLMPoet/ && npx gh-pages -d dist -b gh-deploy"
+    "deploy:gh-pages": "slidev build --base /NekooBasho/ && npx gh-pages -d dist -b gh-deploy"
   },
   "dependencies": {
     "@slidev/cli": "^52.14.1",
