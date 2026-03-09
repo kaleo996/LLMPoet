@@ -4,9 +4,8 @@ LLM poetry generation system based on Qwen3-8B
 
 ## Features
 
-1. **Token-free Pruning**: Prune Qwen3-8B to only output single Chinese character tokens
-2. **Poetry Template Prompts**: Use mask templates to indicate character count requirements for each line
-3. **Constrained Decoding**: Balancing formal constraints and literary merit through our specially designed logit processor
+- **Token-free Pruning**: Prune Qwen3-8B to only output single Chinese character tokens
+- **Constrained Decoding**: Balancing formal constraints and literary merit through our specially designed logit processor
 
 ## Dependencies
 
@@ -65,7 +64,7 @@ python -m model.prune_tokenizer --model_path ./ckpt/Qwen3-8B --output_path ./ckp
 
 This will generate `single_char_tokens.json` in `./ckpt/`.
 
-### 2. Generate Poetry
+### 2. Generate Poetry using Pretrained Models
 
 #### Command Line
 
@@ -95,6 +94,17 @@ This launches a Gradio app in your browser. The UI supports:
 - Theme input
 - Poetry type, metrical pattern, and rhyme group selection
 - Output in simplified or traditional Chinese
+
+#### Agent
+
+```bash
+python agent_cli.py \
+  --model_path /workspace/lp/ckpt/Qwen3-8B \
+  --user_prompt "春天" \
+  --poem_type "五言绝句" \
+  --verbose \
+  --device cuda
+```
 
 #### Supported Poetry Types
 
@@ -190,7 +200,7 @@ python merge_adapter.py \
 
 The merged model can then be used with `python cli.py` by passing `--model_path ./ckpt/Qwen3-8B-Poetry`.
 
-### 5. Evaluation
+### 6. Evaluation
 
 Poetry generation evaluation in [CharPoet](https://arxiv.org/abs/2401.03512) style.
 
@@ -262,15 +272,4 @@ NekooBasho/
 ├── merge_adapter.py             # Merge LoRA adapter into base model
 ├── requirements.txt             # Python dependencies
 └── README.md
-```
-
-### Run Agent
-
-```bash
-python agent_cli.py \
-  --model_path /workspace/lp/ckpt/Qwen3-8B \
-  --user_prompt "春天" \
-  --poem_type "五言绝句" \
-  --verbose \
-  --device cuda
 ```
