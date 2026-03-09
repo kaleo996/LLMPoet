@@ -416,6 +416,28 @@ NekooBasho outperforms CharPoet in almost all dimensions across all poem forms.
 - We also open-source missing/fixed benchmark tooling for classical Chinese poetry evaluation.
 
 ---
+layout: two-cols
+layoutClass: gap-4
+---
+
+<div class="absolute top-8 left-0 right-0 text-center">
+  <h1>Teaser</h1>
+</div>
+
+<div class="flex items-center justify-center mt-12">
+  <img src="./image/teaser.jpg" alt="Teaser" class="max-h-80 rounded-lg" />
+</div>
+
+::right::
+
+<br><br>
+
+- Sea breezes are light by the Holy City,
+- Listening to the melody of Diego's waves in dreams.
+- The place where the American dream originated,
+- Where Columbus's long-held dream finds joy today.
+
+---
 layout: center
 class: text-center
 ---
