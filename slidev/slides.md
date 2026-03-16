@@ -37,7 +37,7 @@ layout: center
 
 # Agenda
 
-1. Problem Definition: What is regulated verse and why it is hard
+1. Problem Definition
 2. Baseline: CharPoet
 3. Our Method (and what we tried but did not work)
 4. Evaluation
@@ -78,9 +78,10 @@ I must climb to the next level.
 
 ## Why post-training is insufficient
 
-- One token can contain multiple Chinese characters, which the model can not directly perceive.
-- Tone and rhyme rules come from [Pingshui Rhymes](https://en.wikipedia.org/wiki/Pingshui_Yun) based on **Middle Chinese**, not modern Chinese pronunciation and not reflected through the writing system. These constraints are difficult to learn via generic post-training.
-- Our later experiments support this: post-training does not reliably teach the model true compliance.
+- One token can contain **multiple Chinese characters**, which the model can not directly perceive.
+- Tone and rhyme rules come from [Pingshui Rhymes](https://en.wikipedia.org/wiki/Pingshui_Yun) based on **Middle Chinese**, not modern Chinese pronunciation and not reflected through the writing system.
+- These constraints are difficult to learn via generic post-training.
+- Our later experiments support this: post-training does not reliably teach the model compliance to the formal restrictions of regulated verses.
 
 ---
 layout: center
@@ -105,8 +106,7 @@ layoutClass: gap-4
 
 Following the approach in CharPoet
 
-- Keep only tokens that are exactly one Chinese character.
-- During sampling, all other tokens are assigned `-inf` scores.
+- Read the vocabulary of the LLM, and keep only tokens that are exactly one Chinese character.
 - This guarantees every generated token corresponds to one Chinese character.
 
 ::right::
@@ -133,7 +133,7 @@ Following the approach in CharPoet
 layout: center
 ---
 
-# What We Tried but It Did Not Work
+# What We Tried but Did Not Work
 
 ## Mask-Filling Fine-Tuning
 
@@ -145,7 +145,8 @@ masked_poem_dict = {
     "<|extra_1|><|extra_1|><|extra_1|><|extra_1|><|extra_1|>，<|extra_1|><|extra_1|><|extra_1|><|extra_1|><|extra_1|>。...",
     ...
 }
-poetry_prompt_template_sc = '''Please compose a {poem_type} on the theme: {user_prompt}.
+poetry_prompt_template_sc = '''<|im_start|>user
+Please compose a {poem_type} on the theme: {user_prompt}.
 Please fill in the following template, inserting one Chinese character at the position of each <|extra_1|>:
 {masked_poem}<|im_end|>
 <|im_start|>assistant
@@ -155,11 +156,11 @@ Here is a {poem_type} on the theme "{user_prompt}":
 
 ---
 
-# What We Tried but It Did Not Work
+# What We Tried but Did Not Work
 
 <div class="relative">
 
-<img src="./image/gufengxiaosheng.jpg" alt="Vocab Prune" class="absolute bottom--16 right-0 max-h-40 opacity-64 pointer-events-none z-0" />
+<img src="./image/gufengxiaosheng.jpg" alt="GuFengXiaoSheng" class="absolute bottom--16 right-0 max-h-40 opacity-80 pointer-events-none z-0" />
 
 <div class="relative z-10 w-2/3">
 
@@ -175,7 +176,7 @@ Here is a {poem_type} on the theme "{user_prompt}":
 
 # Evaluation Setup
 
-- CharPoet did not release evaluation code, so we implemented it from the paper description.
+- CharPoet did not release evaluation code, so we implemented it according to the paper description.
 - Two prompting settings:
   - 100 idiom keywords
   - 100 natural-language instructions
@@ -317,7 +318,7 @@ CharPoet's claimed ~99% acc mostly reflects line length, not true tone/rhyme cor
 # Content Evaluation
 
 - We use LLM-as-a-Judge to avoid human bias, and use the same criteria as CharPoet: Fluency, Meaning, Coherence, Relevance, Aesthetics.
-- In CharPoet reports, average scores are often above 4 for almost all models and dimensions, making ranking uninformative.
+- In the paper of CharPoet, average scores are often above 4 (Scale 1-5) for almost all models and dimensions, making ranking uninformative.
 - We adjusted judge prompts to be stricter:
   - avoid inflated scoring
   - assign low scores aggressively when weaknesses are clear
@@ -327,7 +328,7 @@ CharPoet's claimed ~99% acc mostly reflects line length, not true tone/rhyme cor
 
 # Content Evaluation Results
 
-### Content Score (Scale 1-5) by Moonshot-v1-8k
+Content Score (Scale 1-5) by Moonshot-v1-8k
 
 <style>
 .content-table th,
@@ -403,17 +404,17 @@ CharPoet's claimed ~99% acc mostly reflects line length, not true tone/rhyme cor
 </div>
 
 <div class="mt-4 text-sm opacity-80">
-NekooBasho outperforms CharPoet in almost all dimensions across all poem forms.
+NekooBasho significantly outperforms CharPoet in almost all dimensions across all prompting schemes.
 </div>
 
 ---
 
 # Conclusion
 
-- We build a poetry generation framework that relies on **inference-time control**, requiring no post-training.
-- The approach can migrate to stronger future LLMs with minimal cost.
+- We build a poetry generation framework that relies on **inference-time control**.
+- Our approach requires no post-training, and can migrate to stronger future LLMs with minimal cost.
 - For this task, expensive post-training can underperform well-designed decoding constraints.
-- We also open-source missing/fixed benchmark tooling for classical Chinese poetry evaluation.
+- We also open-source missing/fixed benchmark tools for evaluating regulated verse generation.
 
 ---
 layout: two-cols
@@ -443,3 +444,7 @@ class: text-center
 ---
 
 # Thank You
+
+<div class="flex justify-center my-4">
+  <img src="./image/ra.png" alt="RA" class="max-h-48" />
+</div>

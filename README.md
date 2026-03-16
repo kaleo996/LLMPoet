@@ -1,11 +1,18 @@
 # NekooBasho
 
-LLM poetry generation system based on Qwen3-8B
+![NekooBashoo](slidev/image/logo.jpg)
+
+A Regulated Verse Generation Framework for LLMs
 
 ## Features
 
 - **Token-free Pruning**: Prune Qwen3-8B to only output single Chinese character tokens
 - **Constrained Decoding**: Balancing formal constraints and literary merit through our specially designed logit processor
+- **Interactive Web UI**: Gradio-based app interface for regulated verse generation (see teaser below)
+
+<p align="center">
+  <img src="slidev/image/teaser.jpg" alt="Web UI Teaser" width="64%" />
+</p>
 
 ## Dependencies
 
